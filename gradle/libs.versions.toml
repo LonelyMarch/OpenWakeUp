@@ -1,0 +1,53 @@
+# 依赖与插件版本目录
+
+[versions]
+# —— 工具链 ——
+agp = "9.3.2"
+kotlin = "2.4.20"
+ksp = "2.3.12"
+
+# —— AndroidX / Material（兼容 Android 13）——
+# core-ktx 1.18.0 的 minCompileSdk 为 36，是 compileSdk 36.1 可用的最高正式版；1.19.0 起要求 37。
+coreKtx = "1.18.0"
+appcompat = "1.8.0"
+material = "1.14.0"
+constraintlayout = "2.2.2"
+viewpager2 = "1.1.0"
+recyclerview = "1.4.0"
+webkit = "1.17.0"
+lifecycle = "2.11.0"
+room = "2.8.5"
+# —— 解析、序列化与协程 ——
+jsoup = "1.23.2"
+kotlinxSerialization = "1.11.0"
+kotlinxCoroutines = "1.11.0"
+
+[libraries]
+# AndroidX UI 基础
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+androidx-viewpager2 = { group = "androidx.viewpager2", name = "viewpager2", version.ref = "viewpager2" }
+androidx-recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerview" }
+androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
+
+# Lifecycle
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
+
+# Room（使用 KSP 编译器）
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+
+# HTML 解析
+jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
+
+# 序列化 / 协程
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

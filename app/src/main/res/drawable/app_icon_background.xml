@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 应用图标背景层：与彩色母资源四周渐变同源的两个浅蓝端点。
+     前景层的全幅 WebP 自带渐变，本层仅作为兜底色，保证任意 mask 下不露底。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="270"
+        android:endColor="#A9D5FE"
+        android:startColor="#D7EEFE"
+        android:type="linear" />
+</shape>

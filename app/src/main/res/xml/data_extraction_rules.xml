@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+    Android 12 及以上的数据提取策略：云备份仅在设备具备客户端加密能力时启用，
+    设备间迁移继续使用系统默认范围，以便用户换机后保留课表与应用设置。
+-->
+<data-extraction-rules>
+    <cloud-backup disableIfNoEncryptionCapabilities="true" />
+    <device-transfer />
+</data-extraction-rules>

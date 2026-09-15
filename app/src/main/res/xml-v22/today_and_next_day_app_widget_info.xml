@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 今天与明天双栏小组件配置；保留原限定目录以避免资源迁移引发增量构建遗漏。 -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/today_and_next_day_widget_description"
+    android:initialLayout="@layout/today_list_app_widget"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:previewImage="@drawable/today_and_next_day_widget_preview"
+    android:previewLayout="@layout/today_list_app_widget"
+    android:resizeMode="vertical|horizontal"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

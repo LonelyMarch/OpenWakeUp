@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 从 HTML 文件导入：标题栏与分组列表完全复用全局设置页视觉结构。 -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface">
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/btnBack"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/back"
+                android:src="@drawable/ms_arrow_back_24"
+                app:tint="?attr/colorOnSurface" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/tvTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="@string/html_import"
+                android:textAppearance="?attr/textAppearanceTitleMedium" />
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvList"
+            style="@style/VerticalRecyclerView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:overScrollMode="always"
+            android:paddingBottom="96dp"
+            android:splitMotionEvents="false" />
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <!-- 与网页导入页相同的 Material 3 Expressive filled icon button。 -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnImport"
+        style="?attr/materialIconButtonFilledStyle"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:contentDescription="@string/import_tap"
+        app:icon="@drawable/ms_download_24"
+        app:iconGravity="textEnd"
+        app:iconPadding="0dp" />
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

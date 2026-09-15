@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 教务网页导入：Material 3 Expressive 地址栏 + 全屏 WebView + 右下角浮动操作组。 -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface">
+
+    <!-- WebView 从地址栏下方开始，浮动按钮覆盖在网页之上。 -->
+    <WebView
+        android:id="@+id/webView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="64dp" />
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:background="?attr/colorSurface"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="8dp">
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/back"
+            android:src="@drawable/ms_arrow_back_24"
+            app:tint="?attr/colorOnSurface" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:hint="@string/school_url_hint">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/editUrl"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:imeOptions="actionGo"
+                android:inputType="textUri"
+                android:maxLines="1"
+                android:singleLine="true"
+                android:textSize="12sp" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- 对钩表示确认地址：地址未变时重新加载，已修改时进入新地址。 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnGo"
+            style="?attr/materialIconButtonFilledStyle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/web_reload_page"
+            app:icon="@drawable/ms_check_24"
+            app:iconGravity="textEnd"
+            app:iconPadding="0dp" />
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/pageProgress"
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:layout_marginTop="64dp"
+        android:indeterminate="false"
+        android:max="100"
+        android:visibility="gone" />
+
+    <!-- 三枚按钮都使用 Material 3 Expressive filled icon button 样式。 -->
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:gravity="end"
+        android:orientation="vertical">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDeviceMode"
+            style="?attr/materialIconButtonFilledStyle"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:backgroundTint="?attr/colorSecondaryContainer"
+            android:contentDescription="@string/web_desktop_mode"
+            app:icon="@drawable/ms_computer_24"
+            app:iconGravity="textEnd"
+            app:iconPadding="0dp"
+            app:iconTint="?attr/colorOnSecondaryContainer" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnHelp"
+            style="?attr/materialIconButtonFilledStyle"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:layout_marginTop="12dp"
+            android:backgroundTint="?attr/colorSecondaryContainer"
+            android:contentDescription="@string/web_import_notice_title"
+            app:icon="@drawable/ms_help_24"
+            app:iconGravity="textEnd"
+            app:iconPadding="0dp"
+            app:iconTint="?attr/colorOnSecondaryContainer" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnImportPage"
+            style="?attr/materialIconButtonFilledStyle"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:layout_marginTop="12dp"
+            android:contentDescription="@string/import_this_page"
+            app:icon="@drawable/ms_download_24"
+            app:iconGravity="textEnd"
+            app:iconPadding="0dp" />
+    </androidx.appcompat.widget.LinearLayoutCompat>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 夜间版基础主题：与浅色唯一差异是系统栏图标颜色（深色底配浅色图标）。 -->
+    <style name="BaseAppTheme" parent="@style/Theme.MyApp">
+        <item name="android:windowSoftInputMode">adjustPan</item>
+        <!-- 旧式 translucentNavigation 会由系统叠加半透明黑色；关闭后使用下方真正透明的颜色。 -->
+        <item name="android:windowTranslucentNavigation">false</item>
+        <!-- 系统栏透明后由应用内容负责着色，实现状态栏与页面顶部同色。 -->
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarDividerColor">@android:color/transparent</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.OpenWakeUp.MaterialAlertDialog
+        </item>
+        <item name="bottomSheetDialogTheme">@style/ThemeOverlay.OpenWakeUp.BottomSheetDialog</item>
+        <item name="coordinatorLayoutStyle">@style/Widget.Support.CoordinatorLayout</item>
+        <item name="verticalRecyclerViewStyle">@style/VerticalRecyclerView</item>
+        <item name="windowActionBar">false</item>
+        <item name="windowActionModeOverlay">true</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+
+</resources>

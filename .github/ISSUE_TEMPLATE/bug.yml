@@ -1,0 +1,48 @@
+name: 缺陷报告
+description: 报告可以稳定复现的 OpenWakeUp 功能问题
+title: "fix(app): "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先确认问题发生在最新版本。不要上传账号、密码、Cookie、Token、学号、真实课表或未脱敏的教务页面。
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 填写应用版本或提交 SHA。
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: 设备与 Android 版本
+      placeholder: Pixel 8 / Android 16
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 使用编号步骤描述从启动应用到问题出现的完整路径。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 已脱敏证据
+      description: 可附截图或日志；提交前删除个人信息和学校内部数据。

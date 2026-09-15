@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="4dp">
+
+    <com.openwakeup.schedule.core.designsystem.component.SquareTextView
+        android:id="@+id/tv_num"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/week_selected_bg"
+        android:gravity="center"
+        android:lines="1"
+        android:textColor="@android:color/white" />
+</FrameLayout>

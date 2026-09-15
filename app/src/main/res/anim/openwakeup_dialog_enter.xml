@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 全局弹窗进入动画：短促淡入并从 92% 回到正常尺寸。 -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="170"
+    android:interpolator="@android:anim/decelerate_interpolator"
+    android:shareInterpolator="true">
+
+    <alpha
+        android:fromAlpha="0"
+        android:toAlpha="1" />
+
+    <scale
+        android:fromXScale="0.92"
+        android:fromYScale="0.92"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:toXScale="1"
+        android:toYScale="1" />
+</set>

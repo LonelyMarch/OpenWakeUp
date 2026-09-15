@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?><!-- CSV 模板代码窗口顶部的圆形状态点，具体颜色由布局 tint。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="@android:color/white" />
+</shape>

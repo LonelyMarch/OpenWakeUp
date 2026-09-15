@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?><!-- Cascade 风格弹窗菜单行：icon + title（content/icon/title 三段结构） -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@id/cascade_content"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:minWidth="196dp"
+    android:minHeight="52dp"
+    android:orientation="horizontal">
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@id/cascade_icon"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginStart="24dp"
+        app:tint="?attr/colorOnSurfaceVariant" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@id/cascade_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textAppearance="?attr/textAppearanceSubtitle1" />
+</LinearLayout>

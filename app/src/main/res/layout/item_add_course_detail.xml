@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 时间段设置组：四行独立分段卡，无横线，组件层级与全局设置一致。 -->
+<androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="16dp">
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp">
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/tv_item"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/time_period"
+            android:textAppearance="?attr/textAppearanceTitleSmall"
+            android:textColor="?attr/colorPrimary" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/ib_delete"
+            style="?attr/materialIconButtonStyle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/delete"
+            app:icon="@drawable/ms_close_24"
+            app:iconGravity="textEnd"
+            app:iconPadding="0dp"
+            app:iconTint="?attr/colorError" />
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <com.google.android.material.listitem.ListItemLayout
+        android:id="@+id/detail_weeks_item"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <com.google.android.material.listitem.ListItemCardView
+            android:id="@+id/detail_weeks_card"
+            style="@style/Widget.OpenWakeUp.ListItemCardView.Segmented"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checkable="false">
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/ll_weeks"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:minHeight="44dp"
+                android:orientation="horizontal">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ms_today_24"
+                    app:tint="?attr/colorOnSurfaceVariant" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/et_weeks"
+                    style="@style/Widget.Material3.TextView.ListItem.LabelText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="@string/setting_weeks"
+                    android:maxLines="1" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </com.google.android.material.listitem.ListItemCardView>
+    </com.google.android.material.listitem.ListItemLayout>
+
+    <com.google.android.material.listitem.ListItemLayout
+        android:id="@+id/detail_time_item"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <com.google.android.material.listitem.ListItemCardView
+            android:id="@+id/detail_time_card"
+            style="@style/Widget.OpenWakeUp.ListItemCardView.Segmented"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checkable="false">
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/ll_time"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackground"
+                android:orientation="vertical">
+
+                <!-- 主正文独占第一行，图标与其他设置项使用完全相同的左侧基线。 -->
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:layout_width="match_parent"
+                    android:layout_height="64dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_marginEnd="16dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ms_schedule_24"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/et_time"
+                        style="@style/Widget.Material3.TextView.ListItem.LabelText"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:gravity="center_vertical"
+                        android:hint="@string/course_time_example"
+                        android:maxLines="1" />
+                </androidx.appcompat.widget.LinearLayoutCompat>
+
+                <!-- 自定义时间移到第二行并靠右，不再挤压第一行的时间正文。 -->
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:id="@+id/ll_own_time_toggle"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:gravity="end|center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="8dp"
+                        android:text="@string/setting_custom_time"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textSize="11sp" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/cb_own_time"
+                        style="@style/Widget.OpenWakeUp.Switch.ExtraSmall"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </androidx.appcompat.widget.LinearLayoutCompat>
+
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:id="@+id/ll_own_time"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="40dp"
+                    android:visibility="gone">
+
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="16dp"
+                        app:selectionRequired="false">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_start_time"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:checkable="false"
+                            android:text="@string/add_course_start_time" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_end_time"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:checkable="false"
+                            android:text="@string/add_course_end_time" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+                </androidx.appcompat.widget.LinearLayoutCompat>
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </com.google.android.material.listitem.ListItemCardView>
+    </com.google.android.material.listitem.ListItemLayout>
+
+    <com.google.android.material.listitem.ListItemLayout
+        android:id="@+id/detail_teacher_item"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <com.google.android.material.listitem.ListItemCardView
+            android:id="@+id/detail_teacher_card"
+            style="@style/Widget.OpenWakeUp.ListItemCardView.Segmented"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checkable="false">
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/ll_teacher"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:minHeight="44dp"
+                android:orientation="horizontal">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ms_person_24"
+                    app:tint="?attr/colorOnSurfaceVariant" />
+
+                <androidx.appcompat.widget.AppCompatEditText
+                    android:id="@+id/et_teacher"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:hint="@string/teacher_optional"
+                    android:inputType="textCapWords"
+                    android:singleLine="true"
+                    android:textAppearance="@style/TextAppearance.Material3.BodyLarge" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </com.google.android.material.listitem.ListItemCardView>
+    </com.google.android.material.listitem.ListItemLayout>
+
+    <com.google.android.material.listitem.ListItemLayout
+        android:id="@+id/detail_room_item"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <com.google.android.material.listitem.ListItemCardView
+            android:id="@+id/detail_room_card"
+            style="@style/Widget.OpenWakeUp.ListItemCardView.Segmented"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checkable="false">
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/ll_room"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:minHeight="44dp"
+                android:orientation="horizontal">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ms_meeting_room_24"
+                    app:tint="?attr/colorOnSurfaceVariant" />
+
+                <androidx.appcompat.widget.AppCompatEditText
+                    android:id="@+id/et_room"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:hint="@string/classroom_optional"
+                    android:inputType="textCapWords"
+                    android:singleLine="true"
+                    android:textAppearance="@style/TextAppearance.Material3.BodyLarge" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </com.google.android.material.listitem.ListItemCardView>
+    </com.google.android.material.listitem.ListItemLayout>
+</androidx.appcompat.widget.LinearLayoutCompat>

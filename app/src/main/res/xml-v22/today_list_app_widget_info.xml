@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 当日课程小组件配置；当前最低系统版本高于该限定版本，保留目录以兼容稳定构建链路。 -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/today_widget_description"
+    android:initialLayout="@layout/today_list_app_widget_compact"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:previewImage="@drawable/today_modern_widget_preview"
+    android:previewLayout="@layout/today_list_app_widget_compact"
+    android:resizeMode="vertical|horizontal"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

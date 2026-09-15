@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 布局尺寸与按钮定位为本项目定稿；空态文案已校正。 -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/iv_appwidget_pic_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/appwidget_bg"
+        android:contentDescription="@null"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+
+    <ImageView
+        android:id="@+id/iv_appwidget"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:src="@drawable/appwidget_bg" />
+
+    <RelativeLayout
+        android:id="@+id/rl_appwidget"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <RelativeLayout
+            android:id="@+id/rl_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:layout_marginStart="8dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tv_date"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="2dp"
+                    android:text="@string/widget_preview_date"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="2dp">
+
+                    <TextView
+                        android:id="@+id/tv_schedule_name"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:maxLength="12"
+                        android:maxLines="1"
+                        android:text="@string/default_table_name"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tv_week"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/widget_preview_week_line"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/iv_settings"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="8dp"
+                android:layout_toStartOf="@+id/iv_next"
+                android:contentDescription="@string/widget_action_settings"
+                android:padding="4dp"
+                android:src="@drawable/ms_tune_24" />
+
+            <ImageView
+                android:id="@+id/iv_next"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_alignParentEnd="true"
+                android:layout_marginEnd="8dp"
+                android:contentDescription="@string/widget_action_next_week"
+                android:padding="4dp"
+                android:rotation="180"
+                android:src="@drawable/ms_arrow_back_24" />
+
+            <ImageView
+                android:id="@+id/iv_back"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_alignParentEnd="true"
+                android:layout_marginEnd="8dp"
+                android:contentDescription="@string/widget_action_previous_week"
+                android:padding="4dp"
+                android:src="@drawable/ms_arrow_back_24"
+                android:visibility="gone" />
+        </RelativeLayout>
+
+        <LinearLayout
+            android:id="@+id/weekName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/rl_title"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tv_title0"
+                style="@style/ScheduleHeaderStyle"
+                android:layout_width="0dp"
+                android:layout_weight="0.64"
+                android:lineSpacingExtra="0dp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_title1"
+                style="@style/ScheduleHeaderStyle"
+                android:layout_width="0dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/tv_title2"
+                style="@style/ScheduleHeaderStyle"
+                android:layout_width="0dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/tv_title3"
+                style="@style/ScheduleHeaderStyle"
+                android:layout_width="0dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/tv_title4"
+                style="@style/ScheduleHeaderStyle"
+                android:layout_width="0dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/tv_title5"
+                style="@style/ScheduleHeaderStyle"
+                android:layout_width="0dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/tv_title6"
+                style="@style/ScheduleHeaderStyle"
+                android:layout_width="0dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/tv_title7"
+                style="@style/ScheduleHeaderStyle"
+                android:layout_width="0dp"
+                android:layout_weight="1" />
+        </LinearLayout>
+
+        <ListView
+            android:id="@+id/lv_schedule"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_below="@+id/weekName"
+            android:divider="@null" />
+
+        <FrameLayout
+            android:id="@android:id/empty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/weekName"
+            android:layout_alignParentStart="true"
+            android:layout_alignParentEnd="true"
+            android:layout_alignParentBottom="true">
+
+            <ImageView
+                android:id="@+id/empty_image"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="centerCrop"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/empty_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:lineSpacingExtra="8dp"
+                android:paddingHorizontal="16dp"
+                android:text="@string/widget_empty_week"
+                android:textAlignment="center"
+                android:textSize="12sp" />
+        </FrameLayout>
+    </RelativeLayout>
+</FrameLayout>

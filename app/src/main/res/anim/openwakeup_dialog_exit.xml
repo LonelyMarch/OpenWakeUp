@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 全局弹窗退出动画：快速淡出，避免关闭反馈拖沓。 -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="110"
+    android:interpolator="@android:anim/accelerate_interpolator"
+    android:shareInterpolator="true">
+
+    <alpha
+        android:fromAlpha="1"
+        android:toAlpha="0" />
+
+    <scale
+        android:fromXScale="1"
+        android:fromYScale="1"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:toXScale="0.96"
+        android:toYScale="0.96" />
+</set>

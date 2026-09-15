@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - dev
+      - master
+  pull_request:
+    branches:
+      - dev
+      - master
+  workflow_dispatch:
+
+# 普通构建不需要写入仓库；Fork PR 也不会获得任何额外权限。
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      # actions/checkout v7，固定完整提交 SHA 防止标签被替换。
+      - name: 检出源码
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      # actions/setup-java v6；Gradle 工具链统一使用 Temurin JDK 21。
+      - name: 配置 JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      # android-actions/setup-android v4；负责安装并初始化 sdkmanager。
+      - name: 配置 Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699
+        with:
+          # 默认值包含已从 SDK 仓库移除的旧 `tools` 包，因此只安装仍受支持的平台工具。
+          packages: platform-tools
+
+      - name: 安装 Android 36.1 平台
+        shell: bash
+        run: sdkmanager "platforms;android-36.1"
+
+      # gradle/actions/setup-gradle v6；同时启用缓存和 Wrapper 完整性验证。
+      - name: 配置 Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+        with:
+          validate-wrappers: true
+
+      - name: 授予 Wrapper 执行权限
+        shell: bash
+        run: chmod +x ./gradlew
+
+      # 项目不运行自动化测试；编译、Lint 和两种构建是持续集成的固定门禁。
+      - name: 编译、Lint 与构建
+        shell: bash
+        run: >-
+          ./gradlew
+          :parser:compileKotlin
+          :app:lintDebug
+          :app:assembleDebug
+          :app:assembleRelease
+          --stacktrace
+          --console=plain
+
+      # actions/upload-artifact v7；Lint 失败时仍上传报告便于定位。
+      - name: 上传 Android Lint 报告
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: android-lint-${{ github.run_id }}
+          path: app/build/reports/lint-results-debug.*
+          if-no-files-found: warn
+          retention-days: 7
+      - name: 上传 Debug APK
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openwakeup-debug-${{ github.run_id }}
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7

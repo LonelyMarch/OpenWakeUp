@@ -1,0 +1,42 @@
+# Gradle
+.gradle/
+.kotlin/
+build/
+release/
+debug/
+local.properties
+
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Agent
+.claude/
+.codex/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 临时
+.tmp/
+tmp/
+
+# 本地签名配置与密钥库
+signing/
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# 环境变量与常见私钥格式
+.env
+.env.*
+*.p12
+*.pfx
+*.pem
+*.key
+google-services.json
+service-account*.json

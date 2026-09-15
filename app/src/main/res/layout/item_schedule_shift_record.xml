@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+    日期调课记录专用行：日期占用中间剩余宽度，撤销按钮固定在卡片右侧。
+    独立布局避免把按钮动态追加到 ListItemLayout 后产生叠放和坐标错误。
+-->
+<com.google.android.material.listitem.ListItemLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <com.google.android.material.listitem.ListItemCardView
+        android:id="@+id/shift_record_card"
+        style="@style/Widget.OpenWakeUp.ListItemCardView.Segmented"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:checkable="false">
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="72dp"
+            android:orientation="horizontal">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="16dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ms_event_repeat_24"
+                app:tint="?attr/colorOnSurfaceVariant" />
+
+            <!-- 日期可以换到第二行，但只能使用撤销按钮之外的剩余宽度。 -->
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/shift_record_title"
+                style="@style/Widget.Material3.TextView.ListItem.LabelText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="2" />
+
+            <!-- Filled Tonal 图标按钮由 Expressive 主题提供容器形状、状态层和动态配色。 -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_undo_shift"
+                style="?attr/materialIconButtonFilledTonalStyle"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="12dp"
+                android:contentDescription="@string/undo"
+                app:icon="@drawable/ms_undo_24"
+                app:iconGravity="textEnd"
+                app:iconPadding="0dp" />
+        </androidx.appcompat.widget.LinearLayoutCompat>
+    </com.google.android.material.listitem.ListItemCardView>
+</com.google.android.material.listitem.ListItemLayout>

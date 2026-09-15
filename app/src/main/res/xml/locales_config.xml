@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 应用支持的语言清单：仅英文（默认回退）与简体中文；供系统 per-app 语言设置读取。 -->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="zh" />
+</locale-config>

@@ -1,0 +1,78 @@
+name: Master History Audit
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # 完整历史用于验证双父关系和 dev 祖先关系。
+      - name: 检出完整历史
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: 获取 dev 引用
+        shell: bash
+        run: git fetch --no-tags origin dev:refs/remotes/origin/dev
+
+      - name: 校验 master 发布合并
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          zero_sha='0000000000000000000000000000000000000000'
+          if [[ "$BEFORE_SHA" == "$zero_sha" ]]; then
+            # 首次推送只允许无父根提交；后续更新必须全部是双父发布合并。
+            parent_count="$(git show -s --format='%P' "$AFTER_SHA" | wc -w)"
+            if [[ "$parent_count" -ne 0 ]]; then
+              echo "master 首次推送必须指向新的无父根提交。"
+              exit 1
+            fi
+            exit 0
+          fi
+          read -r commit first_parent second_parent extra_parent < <(git rev-list --parents -n 1 "$AFTER_SHA")
+          if [[ -z "${first_parent:-}" || -z "${second_parent:-}" || -n "${extra_parent:-}" ]]; then
+            echo "master 新提交必须恰好有两个父提交。"
+            exit 1
+          fi
+
+          if [[ "$first_parent" != "$BEFORE_SHA" ]]; then
+            echo "第一父提交必须是更新前的 master HEAD。"
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor "$second_parent" origin/dev; then
+            echo "第二父提交必须来自 dev 历史。"
+            exit 1
+          fi
+
+          first_parent_count="$(git rev-list --first-parent --count "$BEFORE_SHA..$AFTER_SHA")"
+          if [[ "$first_parent_count" -ne 1 ]]; then
+            echo "一次发布只能为 master 增加一个第一父级节点。"
+            exit 1
+          fi
+
+          # 无冲突的发布合并应与 dev 第二父节点具有完全相同的文件树。
+          if [[ "$(git rev-parse "$AFTER_SHA^{tree}")" != "$(git rev-parse "$second_parent^{tree}")" ]]; then
+            echo "发布合并的文件树与 dev 来源提交不一致。"
+            exit 1
+          fi
+
+          subject="$(git show -s --format='%s' "$AFTER_SHA")"
+          if [[ ! "$subject" =~ ^chore\(release\):\ 发布\ v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "master 合并提交标题必须符合 chore(release): 发布 vX.Y.Z。"
+            exit 1
+          fi

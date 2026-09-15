@@ -1,0 +1,26 @@
+name: Dependency Review
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  # 个人私有仓库未启用 GitHub Advanced Security，无法使用 Dependency Review；仓库公开后自动执行。
+  review:
+    name: review
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 检查依赖变化
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
+        with:
+          # 高危漏洞直接阻断；未知许可证继续由 NOTICE 与人工审查处理。
+          fail-on-severity: high
+          comment-summary-in-pr: always

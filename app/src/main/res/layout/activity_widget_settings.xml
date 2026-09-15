@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 全局小部件设置：无“设为默认样式”按钮，顶部仅保留实时样式预览。 -->
+<androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/btn_back"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="4dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ms_arrow_back_24"
+            app:tint="?attr/colorOnSurface" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:text="@string/title_widget_settings"
+            android:textAppearance="?attr/textAppearanceTitleMedium" />
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <!-- 桌面预览区：系统壁纸作为底层，小部件卡片叠放其上。 -->
+    <FrameLayout
+        android:id="@+id/preview_desktop_area"
+        android:layout_width="match_parent"
+        android:layout_height="176dp"
+        android:clipChildren="true">
+
+        <ImageView
+            android:id="@+id/preview_wallpaper"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop" />
+
+        <!-- 轻微暗化壁纸，确保浅色和花纹壁纸上仍能看清小部件边界。 -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#18000000" />
+
+        <!--
+            运行时直接装载 today_course_app_widget.xml。这里的边距只是首次布局的回退值，
+            实际边距会按参考桌面截图中的全宽小部件比例动态计算。
+        -->
+        <FrameLayout
+            android:id="@+id/preview_widget_host"
+            android:layout_width="match_parent"
+            android:layout_height="144dp"
+            android:layout_gravity="center"
+            android:layout_marginHorizontal="24dp" />
+    </FrameLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_list"
+        style="@style/VerticalRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:overScrollMode="always" />
+</androidx.appcompat.widget.LinearLayoutCompat>

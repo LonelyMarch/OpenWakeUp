@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+    课程详情页中的冲突课程条目。
+    条目只负责展示冲突对象，不提供选择状态；分段位置由 ListItemLayout 的状态机控制。
+-->
+<com.google.android.material.listitem.ListItemLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <com.google.android.material.listitem.ListItemCardView
+        android:id="@+id/conflict_card"
+        style="@style/Widget.OpenWakeUp.ListItemCardView.Segmented"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:checkable="false">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="64dp"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="16dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ms_error_24"
+                app:tint="?attr/colorOnSurfaceVariant" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/conflict_course_name"
+                    style="@style/Widget.Material3.TextView.ListItem.LabelText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/conflict_course_schedule"
+                    style="@style/Widget.Material3.TextView.ListItem.SupportingText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxLines="2" />
+            </LinearLayout>
+        </LinearLayout>
+    </com.google.android.material.listitem.ListItemCardView>
+</com.google.android.material.listitem.ListItemLayout>

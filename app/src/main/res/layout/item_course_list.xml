@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/cv_course"
+    android:layout_width="match_parent"
+    android:layout_height="120dp"
+    android:layout_gravity="center"
+    android:clickable="true"
+    android:focusable="true"
+    app:cardElevation="0dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- 仅非法课程显示，与主课表“课程重合”使用同一 Material Symbols 图标。 -->
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/iv_course_state"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_marginBottom="8dp"
+            android:contentDescription="@string/course_invalid_content_description"
+            android:src="@drawable/ms_error_24"
+            android:visibility="gone"
+            app:tint="?attr/colorOnErrorContainer" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/tv_course_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:lineSpacingExtra="8dp"
+            android:text="@string/widget_preview_course_name"
+            android:textAlignment="center" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

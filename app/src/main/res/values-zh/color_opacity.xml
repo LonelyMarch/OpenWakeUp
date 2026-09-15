@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_secondary_text_alpha">课程辅助信息文字不透明度</string>
+    <string name="color_opacity">不透明度</string>
+    <string name="color_opacity_percent">不透明度 %1$d%%</string>
+</resources>

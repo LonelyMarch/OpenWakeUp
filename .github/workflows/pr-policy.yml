@@ -1,0 +1,65 @@
+name: PR Policy
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+      - ready_for_review
+    branches:
+      - dev
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      # 版本校验需要读取受审查分支中的 Gradle 配置。
+      - name: 检出 Pull Request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: 校验标题、目标和发布来源
+        shell: bash
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          CURRENT_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # 普通提交与 Squash 提交的首行都必须包含明确的 type 和 scope。
+          conventional_pattern='^(feat|fix|docs|refactor|build|ci|chore|perf|style|revert)\([a-z0-9][a-z0-9._/-]*\)!?: .+'
+          if [[ ! "$PR_TITLE" =~ $conventional_pattern ]]; then
+            echo "PR 标题必须符合 <type>(<scope>): <subject>。"
+            exit 1
+          fi
+          if [[ "$BASE_REF" == "master" ]]; then
+            # master 只接受当前仓库的 dev，Fork 中同名分支也不能绕过来源限制。
+            if [[ "$HEAD_REF" != "dev" || "$HEAD_REPOSITORY" != "$CURRENT_REPOSITORY" ]]; then
+              echo "master 只接受同仓库 dev 分支发起的发布 PR。"
+              exit 1
+            fi
+
+            release_pattern='^chore\(release\): 发布 v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$'
+            if [[ ! "$PR_TITLE" =~ $release_pattern ]]; then
+              echo "发布 PR 标题必须符合 chore(release): 发布 vX.Y.Z。"
+              exit 1
+            fi
+
+            app_version="$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)"
+            title_version="${PR_TITLE#chore(release): 发布 v}"
+            if [[ -z "$app_version" || "$title_version" != "$app_version" ]]; then
+              echo "发布标题版本 $title_version 与 app versionName $app_version 不一致。"
+              exit 1
+            fi
+          fi

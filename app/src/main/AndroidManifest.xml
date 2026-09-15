@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 文件访问使用系统选择器，Android 13 及以上无需申请存储权限。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 小组件跨天刷新依赖后台执行能力；由用户在设置页主动触发系统授权。 -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <application
+        android:name=".app.OpenWakeUpApp"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="true">
+
+        <!-- 应用入口。 -->
+        <activity
+            android:name=".app.SplashActivity"
+            android:exported="true"
+            android:theme="@style/SplashTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".feature.settings.appearance.TableConfigActivity"
+            android:exported="false" />
+        <activity
+            android:name=".feature.settings.schedule.ScheduleSettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".feature.settings.schedule.ScheduleShiftActivity"
+            android:exported="false" />
+        <activity
+            android:name=".feature.settings.timetable.TimeSettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".feature.settings.timetable.TimeTableDetailActivity"
+            android:exported="false" />
+        <activity
+            android:name=".feature.schedulemanage.ScheduleManageActivity"
+            android:exported="false" />
+        <activity
+            android:name=".feature.schedule.ScheduleActivity"
+            android:exported="false"
+            android:launchMode="singleTask" />
+        <activity
+            android:name=".feature.about.AboutActivity"
+            android:exported="false" />
+        <activity
+            android:name=".feature.settings.global.SettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".feature.settings.widget.WidgetSettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".feature.clock.ClockActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/AppTheme" />
+
+        <activity
+            android:name=".feature.courseedit.AddCourseActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!--
+            学校列表的输入法只覆盖页面，不参与窗口测量。
+            这样右侧首字母索引始终以完整屏幕为高度，不会随软键盘顶部边界重新拉伸。
+        -->
+        <activity
+            android:name=".feature.importexport.SchoolListActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustNothing" />
+        <activity
+            android:name=".feature.importexport.WebLoginActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".feature.importexport.HtmlImportActivity"
+            android:exported="false" />
+        <activity
+            android:name=".feature.importexport.IcsImportActivity"
+            android:exported="false" />
+        <activity
+            android:name=".feature.importexport.CsvImportActivity"
+            android:exported="false" />
+        <activity
+            android:name=".feature.importexport.BackupExportActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".feature.importexport.BackupImportActivity"
+            android:exported="true"
+            android:label="@string/backup_import_title">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:mimeType="application/vnd.openwakeup.backup+zip"
+                    android:scheme="content" />
+                <data
+                    android:mimeType="application/zip"
+                    android:scheme="content" />
+                <data
+                    android:mimeType="application/octet-stream"
+                    android:scheme="content" />
+                <data
+                    android:mimeType="application/octet-stream"
+                    android:scheme="file" />
+            </intent-filter>
+        </activity>
+
+        <receiver
+            android:name=".platform.appwidget.ScheduleWidgetProvider"
+            android:exported="false"
+            android:label="@string/title_week_widget">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/schedule_app_widget_info" />
+        </receiver>
+
+        <service
+            android:name=".platform.appwidget.ScheduleWidgetService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+
+        <receiver
+            android:name=".platform.appwidget.TodayWidgetProvider"
+            android:exported="false"
+            android:label="@string/title_day_widget">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/today_course_app_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".platform.appwidget.TodayCourseWidgetProvider"
+            android:exported="false"
+            android:label="@string/title_today_widget">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/today_list_app_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".platform.appwidget.RecentCourseWidgetProvider"
+            android:exported="false"
+            android:label="@string/title_recent_widget">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/today_and_next_day_app_widget_info" />
+        </receiver>
+
+        <service
+            android:name=".platform.appwidget.TodayWidgetService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+
+        <service
+            android:name=".platform.appwidget.TodayCourseWidgetService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+
+        <receiver
+            android:name=".platform.reminder.ReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.openwakeup.schedule.reminder.REMIND" />
+                <action android:name="com.openwakeup.schedule.reminder.REARRANGE" />
+                <action android:name="com.openwakeup.schedule.widget.DATE_REFRESH" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+        <provider
+            android:name=".platform.provider.ScheduleContentProvider"
+            android:authorities="com.openwakeup.schedule.provider"
+            android:exported="false" />
+    </application>
+
+</manifest>

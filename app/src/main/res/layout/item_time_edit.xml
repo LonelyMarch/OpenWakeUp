@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 单节时间行横向排列节次与起止时间，便于连续编辑。 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="72dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <TextView
+        android:id="@+id/tvNode"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:textAppearance="?attr/textAppearanceBodyLarge"
+        tools:text="第 1 节" />
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/editStart"
+        android:layout_width="80dp"
+        android:layout_height="36dp"
+        android:background="@drawable/time_input_background"
+        android:gravity="center"
+        android:hint="@string/time_start_example"
+        android:inputType="time"
+        android:maxLines="1"
+        android:paddingHorizontal="6dp"
+        android:textSize="16sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="6dp"
+        android:text="@string/time_range_separator"
+        android:textSize="16sp" />
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/editEnd"
+        android:layout_width="80dp"
+        android:layout_height="36dp"
+        android:background="@drawable/time_input_background"
+        android:gravity="center"
+        android:hint="@string/time_end_example"
+        android:inputType="time"
+        android:maxLines="1"
+        android:paddingHorizontal="6dp"
+        android:textSize="16sp" />
+</LinearLayout>

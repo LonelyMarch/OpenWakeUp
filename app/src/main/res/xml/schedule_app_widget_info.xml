@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/week_widget_description"
+    android:initialLayout="@layout/schedule_app_widget"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:previewImage="@drawable/week_widget_preview"
+    android:previewLayout="@layout/schedule_app_widget"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

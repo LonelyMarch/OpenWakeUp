@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 暗色启动画面：深色基底 + 品牌居中 Logo（彩色 Logo 在深浅两版均可读）。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <color android:color="#141218" />
+    </item>
+    <item android:top="235dp">
+        <bitmap
+            android:gravity="top|center_horizontal"
+            android:src="@drawable/ic_welcome_center_logo" />
+    </item>
+</layer-list>

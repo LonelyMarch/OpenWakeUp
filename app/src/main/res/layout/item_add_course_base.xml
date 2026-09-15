@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 添加课程基础信息：四个设置项与全局设置完全相同，分别使用独立分段 ListItemCardView。 -->
+<androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rl_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingTop="16dp"
+    android:paddingEnd="16dp">
+
+    <com.google.android.material.listitem.ListItemLayout
+        android:id="@+id/base_name_item"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <com.google.android.material.listitem.ListItemCardView
+            android:id="@+id/base_name_card"
+            style="@style/Widget.OpenWakeUp.ListItemCardView.Segmented"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checkable="false">
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/ll_course_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="44dp"
+                android:orientation="vertical">
+
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:minHeight="44dp"
+                    android:orientation="horizontal">
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_marginEnd="16dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ms_class_24"
+                        app:tint="?attr/colorOnSurfaceVariant" />
+
+                    <androidx.appcompat.widget.AppCompatEditText
+                        android:id="@+id/et_name"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@null"
+                        android:gravity="center_vertical"
+                        android:hint="@string/course_name"
+                        android:inputType="textCapSentences"
+                        android:singleLine="true"
+                        android:textAppearance="@style/TextAppearance.Material3.BodyLarge" />
+                </androidx.appcompat.widget.LinearLayoutCompat>
+
+                <HorizontalScrollView
+                    android:id="@+id/sv_candidate_name"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="40dp"
+                    android:layout_marginBottom="8dp"
+                    android:scrollbars="none">
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/cg_candidate_name"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:singleSelection="true" />
+                </HorizontalScrollView>
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </com.google.android.material.listitem.ListItemCardView>
+    </com.google.android.material.listitem.ListItemLayout>
+
+    <com.google.android.material.listitem.ListItemLayout
+        android:id="@+id/base_color_item"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <com.google.android.material.listitem.ListItemCardView
+            android:id="@+id/base_color_card"
+            style="@style/Widget.OpenWakeUp.ListItemCardView.Segmented"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checkable="false">
+
+            <!-- 颜色行与课表外观页颜色项同构：前置图标、标题/说明、右侧圆形色块。 -->
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/ll_color"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:minHeight="44dp"
+                android:orientation="horizontal">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ms_format_color_text_24"
+                    app:tint="?attr/colorOnSurfaceVariant" />
+
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/tv_color"
+                        style="@style/Widget.Material3.TextView.ListItem.LabelText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/select_course_color" />
+
+                    <com.google.android.material.textview.MaterialTextView
+                        style="@style/Widget.Material3.TextView.ListItem.SupportingText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/select_course_color_desc" />
+                </androidx.appcompat.widget.LinearLayoutCompat>
+
+                <View
+                    android:id="@+id/iv_color"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/setting_color_swatch_ring"
+                    android:foreground="@drawable/setting_color_swatch_fill" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </com.google.android.material.listitem.ListItemCardView>
+    </com.google.android.material.listitem.ListItemLayout>
+
+    <com.google.android.material.listitem.ListItemLayout
+        android:id="@+id/base_credit_item"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <com.google.android.material.listitem.ListItemCardView
+            android:id="@+id/base_credit_card"
+            style="@style/Widget.OpenWakeUp.ListItemCardView.Segmented"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checkable="false">
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/ll_credit"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:minHeight="44dp"
+                android:orientation="horizontal">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ms_school_24"
+                    app:tint="?attr/colorOnSurfaceVariant" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/tv_credit"
+                    style="@style/Widget.Material3.TextView.ListItem.LabelText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="@string/credit_optional" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </com.google.android.material.listitem.ListItemCardView>
+    </com.google.android.material.listitem.ListItemLayout>
+
+    <com.google.android.material.listitem.ListItemLayout
+        android:id="@+id/base_note_item"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <com.google.android.material.listitem.ListItemCardView
+            android:id="@+id/base_note_card"
+            style="@style/Widget.OpenWakeUp.ListItemCardView.Segmented"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checkable="false">
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/ll_note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:minHeight="44dp"
+                android:orientation="horizontal">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ms_sticky_note_24"
+                    app:tint="?attr/colorOnSurfaceVariant" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/tv_note"
+                    style="@style/Widget.Material3.TextView.ListItem.LabelText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="@string/note_optional"
+                    android:maxLines="1" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+        </com.google.android.material.listitem.ListItemCardView>
+    </com.google.android.material.listitem.ListItemLayout>
+</androidx.appcompat.widget.LinearLayoutCompat>

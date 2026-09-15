@@ -1,0 +1,16 @@
+# 默认将文本文件统一为 LF，避免跨平台提交产生整文件行尾差异。
+* text=auto eol=lf
+
+# Windows 批处理脚本使用 CRLF，确保可由 cmd.exe 直接执行。
+*.bat text eol=crlf
+
+# 二进制资源不参与行尾转换。
+*.jar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.keystore binary
+*.jks binary

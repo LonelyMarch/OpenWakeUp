@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <color android:color="#ffffff" />
+    </item>
+    <item>
+        <bitmap
+            android:gravity="fill"
+            android:src="@drawable/ic_welcome_bg" />
+    </item>
+    <item android:top="235dp">
+        <bitmap
+            android:gravity="top|center_horizontal"
+            android:src="@drawable/ic_welcome_center_logo" />
+    </item>
+</layer-list>

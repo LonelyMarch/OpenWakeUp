@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/cl_table_select"
+    style="@style/ButtonBackground"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:clipChildren="true"
+    android:gravity="center"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp">
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/iv_table_bg"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/menu_setting"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:padding="12dp"
+        app:layout_constraintBottom_toBottomOf="@+id/iv_table_bg"
+        app:layout_constraintEnd_toEndOf="@+id/iv_table_bg"
+        app:layout_constraintStart_toStartOf="@+id/iv_table_bg"
+        app:layout_constraintTop_toTopOf="@+id/iv_table_bg"
+        app:srcCompat="@drawable/ms_check_24"
+        app:tint="?attr/colorOnPrimary" />
+
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/tv_table_name"
+        android:layout_width="48dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:singleLine="true"
+        android:textAlignment="center"
+        android:textSize="11sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/iv_table_bg" />
+</androidx.constraintlayout.widget.ConstraintLayout>

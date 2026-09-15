@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 13 及以上圆形主题图标，与普通图标共用彩色图层和单色蒙版。 -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/app_icon_background" />
+    <foreground android:drawable="@drawable/app_icon_artwork" />
+    <monochrome android:drawable="@drawable/app_icon_monochrome" />
+</adaptive-icon>

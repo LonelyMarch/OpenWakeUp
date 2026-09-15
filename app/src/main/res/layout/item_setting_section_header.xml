@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 设置分组标题（section header）：颜色与“上课时间”页组名统一使用主题 primary。 -->
+<com.google.android.material.textview.MaterialTextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/setting_section_title"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="32dp"
+    android:layout_marginTop="24dp"
+    android:layout_marginEnd="16dp"
+    android:layout_marginBottom="8dp"
+    android:textAppearance="?attr/textAppearanceTitleSmall"
+    android:textColor="?attr/colorPrimary"
+    android:textSize="14sp" />

@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 学校选择页：标题、内嵌搜索输入框、分类按钮组与完整学校列表。 -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface">
+
+    <!-- 标题栏、内嵌搜索输入框和分类按钮组共同固定在列表上方。 -->
+    <com.google.android.material.appbar.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurface"
+        app:elevation="0dp">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@android:color/transparent"
+            android:minHeight="?attr/actionBarSize"
+            app:navigationIcon="@drawable/ms_arrow_back_24"
+            app:navigationIconTint="?attr/colorOnSurfaceVariant"
+            app:title="@string/title_select_school"
+            app:titleTextAppearance="@style/TextAppearance.Material3.TitleLarge" />
+
+        <!-- 内嵌搜索输入框始终与下方列表同屏；输入只负责滚动定位，不展开全屏候选层。 -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/searchInputLayout"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="12dp"
+            android:layout_marginBottom="4dp"
+            android:hint="@string/search_school"
+            app:boxCornerRadiusBottomEnd="28dp"
+            app:boxCornerRadiusBottomStart="28dp"
+            app:boxCornerRadiusTopEnd="28dp"
+            app:boxCornerRadiusTopStart="28dp"
+            app:endIconMode="clear_text"
+            app:startIconDrawable="@drawable/ms_search_24"
+            app:startIconTint="?attr/colorOnSurfaceVariant">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/searchInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Expressive 单选按钮组：相较传统 TabLayout，选中项会使用 M3E 的形状与状态动效；
+             三个按钮等宽，既保持分类切换语义，也与应用内其他圆角组件统一。 -->
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/categoryGroup"
+            style="?attr/materialButtonToggleGroupStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="12dp"
+            android:spacing="8dp"
+            app:checkedButton="@id/schoolCategoryUndergraduate"
+            app:selectionRequired="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/schoolCategoryUndergraduate"
+                style="@style/Widget.Material3Expressive.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:checkable="true"
+                android:maxLines="1"
+                android:text="@string/school_category_undergraduate"
+                android:textColor="@color/school_category_button_content"
+                app:backgroundTint="@color/school_category_button_container"
+                app:strokeColor="?attr/colorPrimary" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/schoolCategoryGraduate"
+                style="@style/Widget.Material3Expressive.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:checkable="true"
+                android:maxLines="1"
+                android:text="@string/school_category_graduate"
+                android:textColor="@color/school_category_button_content"
+                app:backgroundTint="@color/school_category_button_container"
+                app:strokeColor="?attr/colorPrimary" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/schoolCategoryCommon"
+                style="@style/Widget.Material3Expressive.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:checkable="true"
+                android:maxLines="1"
+                android:text="@string/school_category_common"
+                android:textColor="@color/school_category_button_content"
+                app:backgroundTint="@color/school_category_button_container"
+                app:strokeColor="?attr/colorPrimary" />
+        </com.google.android.material.button.MaterialButtonToggleGroup>
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <!-- 列表区跟随 AppBarLayout 滚动（CoordinatorLayout 子项需显式声明滚动行为）。 -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recycler"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:overScrollMode="never"
+            android:paddingEnd="28dp"
+            android:paddingBottom="16dp"
+            tools:listitem="@layout/item_school" />
+
+        <TextView
+            android:id="@+id/tvEmpty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:padding="24dp"
+            android:text="@string/school_not_found"
+            android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
+        <!-- 自绘字母栏覆盖在列表右侧，触摸时由 Activity 把列表定位到对应分组。 -->
+        <com.openwakeup.schedule.core.designsystem.component.SchoolIndexView
+            android:id="@+id/schoolIndex"
+            android:layout_width="28dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="end"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp" />
+    </FrameLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

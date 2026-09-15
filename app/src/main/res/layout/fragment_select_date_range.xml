@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 添加课程日期模式：开始/截止切换按钮 + 年月日三个非循环滚轮。 -->
+<androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="320dp"
+    android:layout_height="wrap_content"
+    android:layout_gravity="center"
+    android:orientation="vertical"
+    android:paddingTop="16dp">
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:gravity="center_vertical">
+
+        <com.google.android.material.textview.MaterialTextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:text="@string/add_course_title_select_date_range"
+            android:textStyle="bold" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/tv_week_mode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:text="@string/add_course_week_mode"
+            android:textColor="?attr/colorPrimary" />
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="8dp"
+        app:selectionRequired="true"
+        app:singleSelection="true">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_date_start"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:checkable="true" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_date_end"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:checkable="true" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:id="@+id/date_picker_row"
+        android:layout_width="match_parent"
+        android:layout_height="200dp"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginTop="8dp">
+
+        <com.openwakeup.schedule.core.designsystem.component.NumberPickerView
+            android:id="@+id/wp_year"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            app:npv_DividerColor="?attr/colorOutline"
+            app:npv_RespondChangeOnDetached="false"
+            app:npv_ShownCount="3"
+            app:npv_TextColorNormal="?attr/colorOnSurfaceVariant"
+            app:npv_TextColorSelected="?attr/colorOnSurface"
+            app:npv_TextSizeNormal="15sp"
+            app:npv_TextSizeSelected="17sp"
+            app:npv_WrapSelectorWheel="false" />
+
+        <com.openwakeup.schedule.core.designsystem.component.NumberPickerView
+            android:id="@+id/wp_month"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            app:npv_DividerColor="?attr/colorOutline"
+            app:npv_RespondChangeOnDetached="false"
+            app:npv_ShownCount="3"
+            app:npv_TextColorNormal="?attr/colorOnSurfaceVariant"
+            app:npv_TextColorSelected="?attr/colorOnSurface"
+            app:npv_TextSizeNormal="15sp"
+            app:npv_TextSizeSelected="17sp"
+            app:npv_WrapSelectorWheel="false" />
+
+        <com.openwakeup.schedule.core.designsystem.component.NumberPickerView
+            android:id="@+id/wp_date_day"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            app:npv_DividerColor="?attr/colorOutline"
+            app:npv_RespondChangeOnDetached="false"
+            app:npv_ShownCount="3"
+            app:npv_TextColorNormal="?attr/colorOnSurfaceVariant"
+            app:npv_TextColorSelected="?attr/colorOnSurface"
+            app:npv_TextSizeNormal="15sp"
+            app:npv_TextSizeSelected="17sp"
+            app:npv_WrapSelectorWheel="false" />
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_cancel"
+            style="@style/DialogButtonStyle"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:text="@string/cancel" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_save"
+            style="@style/DialogButtonStyle"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:text="@string/ok"
+            android:textStyle="bold" />
+    </androidx.appcompat.widget.LinearLayoutCompat>
+</androidx.appcompat.widget.LinearLayoutCompat>

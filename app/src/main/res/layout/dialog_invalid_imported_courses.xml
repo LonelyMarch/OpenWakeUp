@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+    非法导入课程提示弹窗的正文区域。
+    标题和确认按钮由 MaterialAlertDialog 提供，此处仅承载可滚动课程列表，避免展示越界位置等冗余信息。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="24dp"
+    android:paddingEnd="24dp"
+    android:paddingBottom="8dp">
+
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/invalid_course_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:overScrollMode="ifContentScrolls">
+
+        <LinearLayout
+            android:id="@+id/invalid_course_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

@@ -1,0 +1,48 @@
+name: 教务解析适配
+description: 报告教务网页、HTML、CSV 或 ICS 解析兼容问题
+title: "fix(parser): "
+labels:
+  - parser
+body:
+  - type: markdown
+    attributes:
+      value: |
+        严禁上传真实登录凭据、Cookie、Token、学号、课表或未经学校授权的内部页面。请使用最小化、虚构化样本复现结构问题。
+  - type: dropdown
+    id: source_type
+    attributes:
+      label: 数据来源
+      options:
+        - 教务网页
+        - 本地 HTML
+        - CSV
+        - ICS
+    validations:
+      required: true
+  - type: input
+    id: parser_type
+    attributes:
+      label: 解析器或教务类型
+      description: 不确定时填写“不确定”。
+    validations:
+      required: true
+  - type: textarea
+    id: sanitized_sample
+    attributes:
+      label: 最小化虚构样本
+      description: 用虚构课程、教师、地点和学号替换真实内容，仅保留触发问题的结构。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望解析结果
+    validations:
+      required: true
+  - type: checkboxes
+    id: authorization
+    attributes:
+      label: 提交确认
+      options:
+        - label: 样本已彻底脱敏，且我有权公开其中剩余内容。
+          required: true

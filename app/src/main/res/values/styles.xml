@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="AppTheme" parent="@style/BaseAppTheme">
+        <item name="android:forceDarkAllowed">false</item>
+    </style>
+
+
+    <style name="BaseAppTheme" parent="@style/Theme.MyApp">
+        <item name="android:windowSoftInputMode">adjustPan</item>
+        <!-- 旧式 translucentNavigation 会由系统叠加半透明黑色；关闭后使用下方真正透明的颜色。 -->
+        <item name="android:windowTranslucentNavigation">false</item>
+        <!-- 系统栏透明后由应用内容负责着色，实现状态栏与页面顶部同色。 -->
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarDividerColor">@android:color/transparent</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.OpenWakeUp.MaterialAlertDialog
+        </item>
+        <item name="bottomSheetDialogTheme">@style/ThemeOverlay.OpenWakeUp.BottomSheetDialog</item>
+        <item name="coordinatorLayoutStyle">@style/Widget.Support.CoordinatorLayout</item>
+        <item name="verticalRecyclerViewStyle">@style/VerticalRecyclerView</item>
+        <item name="windowActionBar">false</item>
+        <item name="windowActionModeOverlay">true</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+
+
+    <style name="Animation.OpenWakeUp.Dialog" parent="@android:style/Animation.Dialog">
+        <item name="android:windowEnterAnimation">@anim/openwakeup_dialog_enter</item>
+        <item name="android:windowExitAnimation">@anim/openwakeup_dialog_exit</item>
+    </style>
+
+    <!-- 颜色、周次、时间等底部弹窗使用 Material 主题公开提供的默认滑入/滑出动画。 -->
+    <style name="ThemeOverlay.OpenWakeUp.BottomSheetDialog" parent="@style/ThemeOverlay.Material3.BottomSheetDialog"></style>
+
+
+    <style name="ButtonBackground" parent="">
+        <item name="android:background">?android:attr/selectableItemBackgroundBorderless</item>
+    </style>
+
+
+    <style name="DialogButtonStyle" parent="@style/Widget.Material3.Button.TextButton">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="cornerSize">16dp</item>
+    </style>
+
+    <style name="ScheduleHeaderStyle" parent="">
+        <item name="android:textSize">12sp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:background">@color/nodeIndex</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:paddingBottom">8dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:lineSpacingExtra">3dp</item>
+    </style>
+
+    <style name="SplashTheme" parent="@style/Theme.AppStartLoad">
+        <item name="android:windowLayoutInDisplayCutoutMode">never</item>
+    </style>
+
+    <style name="Theme.AppStartLoad" parent="@android:style/Theme.NoTitleBar">
+        <item name="android:windowBackground">@drawable/init_splash_drawable</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowTranslucentStatus">true</item>
+        <item name="android:windowTranslucentNavigation">true</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
+
+    <style name="Theme.AppWidget.AppWidgetContainerParent" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:colorAccent">@color/md_theme_primary</item>
+    </style>
+
+
+    <!-- 全局根主题：Expressive DayNight（浅色/暗色/跟随系统由 AppCompatDelegate 驱动，
+         品牌语义色经 md_theme_* 浅夜双份 token 映射）。 -->
+    <style name="Theme.MyApp" parent="@style/Theme.Material3Expressive.DayNight.NoActionBar">
+        <item name="android:colorBackground">@color/md_theme_background</item>
+        <item name="colorError">@color/md_theme_error</item>
+        <item name="colorErrorContainer">@color/md_theme_errorContainer</item>
+        <item name="colorOnBackground">@color/md_theme_onBackground</item>
+        <item name="colorOnError">@color/md_theme_onError</item>
+        <item name="colorOnErrorContainer">@color/md_theme_onErrorContainer</item>
+        <item name="colorOnPrimary">@color/md_theme_onPrimary</item>
+        <item name="colorOnPrimaryContainer">@color/md_theme_onPrimaryContainer</item>
+        <item name="colorOnPrimaryFixed">@color/md_theme_onPrimaryFixed</item>
+        <item name="colorOnPrimaryFixedVariant">@color/md_theme_onPrimaryFixedVariant</item>
+        <item name="colorOnSecondary">@color/md_theme_onSecondary</item>
+        <item name="colorOnSecondaryContainer">@color/md_theme_onSecondaryContainer</item>
+        <item name="colorOnSecondaryFixed">@color/md_theme_onSecondaryFixed</item>
+        <item name="colorOnSecondaryFixedVariant">@color/md_theme_onSecondaryFixedVariant</item>
+        <item name="colorOnSurface">@color/md_theme_onSurface</item>
+        <item name="colorOnSurfaceInverse">@color/md_theme_inverseOnSurface</item>
+        <item name="colorOnSurfaceVariant">@color/md_theme_onSurfaceVariant</item>
+        <item name="colorOnTertiary">@color/md_theme_onTertiary</item>
+        <item name="colorOnTertiaryContainer">@color/md_theme_onTertiaryContainer</item>
+        <item name="colorOnTertiaryFixed">@color/md_theme_onTertiaryFixed</item>
+        <item name="colorOnTertiaryFixedVariant">@color/md_theme_onTertiaryFixedVariant</item>
+        <item name="colorOutline">@color/md_theme_outline</item>
+        <item name="colorOutlineVariant">@color/md_theme_outlineVariant</item>
+        <item name="colorPrimary">@color/md_theme_primary</item>
+        <item name="colorPrimaryContainer">@color/md_theme_primaryContainer</item>
+        <item name="colorPrimaryFixed">@color/md_theme_primaryFixed</item>
+        <item name="colorPrimaryFixedDim">@color/md_theme_primaryFixedDim</item>
+        <item name="colorPrimaryInverse">@color/md_theme_inversePrimary</item>
+        <item name="colorSecondary">@color/md_theme_secondary</item>
+        <item name="colorSecondaryContainer">@color/md_theme_secondaryContainer</item>
+        <item name="colorSecondaryFixed">@color/md_theme_secondaryFixed</item>
+        <item name="colorSecondaryFixedDim">@color/md_theme_secondaryFixedDim</item>
+        <item name="colorSurface">@color/md_theme_surface</item>
+        <item name="colorSurfaceBright">@color/md_theme_surfaceBright</item>
+        <item name="colorSurfaceContainer">@color/md_theme_surfaceContainer</item>
+        <item name="colorSurfaceContainerHigh">@color/md_theme_surfaceContainerHigh</item>
+        <item name="colorSurfaceContainerHighest">@color/md_theme_surfaceContainerHighest</item>
+        <item name="colorSurfaceContainerLow">@color/md_theme_surfaceContainerLow</item>
+        <item name="colorSurfaceContainerLowest">@color/md_theme_surfaceContainerLowest</item>
+        <item name="colorSurfaceDim">@color/md_theme_surfaceDim</item>
+        <item name="colorSurfaceInverse">@color/md_theme_inverseSurface</item>
+        <item name="colorSurfaceVariant">@color/md_theme_surfaceVariant</item>
+        <item name="colorTertiary">@color/md_theme_tertiary</item>
+        <item name="colorTertiaryContainer">@color/md_theme_tertiaryContainer</item>
+        <item name="colorTertiaryFixed">@color/md_theme_tertiaryFixed</item>
+        <item name="colorTertiaryFixedDim">@color/md_theme_tertiaryFixedDim</item>
+    </style>
+
+
+    <!-- Expressive 弹窗 overlay：容器/按钮形状继承库自带 Material3Expressive 版本，
+         仅保留 OpenWakeUp 自定义的淡入缩放窗口动画。 -->
+    <style name="ThemeOverlay.OpenWakeUp.MaterialAlertDialog" parent="@style/ThemeOverlay.Material3Expressive.MaterialAlertDialog">
+        <item name="android:windowAnimationStyle">@style/Animation.OpenWakeUp.Dialog</item>
+    </style>
+
+    <!-- 设置分段卡片使用独立容器色，避免与页面背景混合后失去层级。 -->
+    <style name="Widget.OpenWakeUp.ListItemCardView.Segmented" parent="Widget.Material3.ListItemCardView.Segmented">
+        <item name="cardBackgroundColor">@color/setting_card_container</item>
+    </style>
+
+    <!-- 缩小两号的开关：统一 0.72 倍视觉缩放（组件库无小号变体），
+         点击热区仍由所在行的整行点击保证，不受缩放影响。
+         列表行内沿用列表开关的既定边距语义，表单行内沿用默认 MaterialSwitch。 -->
+    <style name="Widget.OpenWakeUp.Switch.ListItem.Small" parent="Widget.Material3.Switch.ListItem">
+        <item name="android:scaleX">0.72</item>
+        <item name="android:scaleY">0.72</item>
+        <item name="trackTint">@color/openwakeup_switch_track_tint</item>
+        <item name="thumbTint">@color/openwakeup_switch_thumb_tint</item>
+    </style>
+
+    <style name="Widget.OpenWakeUp.Switch.Small" parent="Widget.Material3.CompoundButton.MaterialSwitch">
+        <item name="android:scaleX">0.72</item>
+        <item name="android:scaleY">0.72</item>
+        <item name="trackTint">@color/openwakeup_switch_track_tint</item>
+        <item name="thumbTint">@color/openwakeup_switch_thumb_tint</item>
+    </style>
+
+    <!-- 添加课程“自定义时间”专用：在 Small 的基础上再缩小约 30%。 -->
+    <style name="Widget.OpenWakeUp.Switch.ExtraSmall" parent="Widget.OpenWakeUp.Switch.Small">
+        <item name="android:scaleX">0.50</item>
+        <item name="android:scaleY">0.50</item>
+    </style>
+
+
+    <!--
+        设置页纵向列表的统一滚动样式。
+        项目最低版本为 Android 13，OVER_SCROLL_ALWAYS 会调用系统原生的拉伸式 EdgeEffect：
+        用户在列表顶端或底端继续拖动时，内容会随手势弹性拉伸，并在松手后平滑回位。
+    -->
+    <style name="VerticalRecyclerView" parent="@android:style/Widget">
+        <item name="android:scrollbars">vertical</item>
+        <item name="android:overScrollMode">always</item>
+    </style>
+
+    <style name="Widget.AppWidget.AppWidget.Container" parent="@android:style/Widget">
+        <item name="android:background">@drawable/system_appwidget_bg</item>
+        <item name="android:colorAccent">@color/md_theme_primary</item>
+    </style>
+
+</resources>

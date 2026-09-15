@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 主课表界面代码构建视图树所用的 view id -->
+    <item name="anko_root" type="id" />
+    <item name="anko_cl_schedule" type="id" />
+    <item name="anko_iv_bg" type="id" />
+    <item name="anko_tv_date" type="id" />
+    <item name="anko_tv_week" type="id" />
+    <item name="anko_tv_weekday" type="id" />
+    <item name="anko_ib_add" type="id" />
+    <item name="anko_ib_more" type="id" />
+    <item name="anko_sheet_scrim" type="id" />
+    <item name="anko_vp_schedule" type="id" />
+    <item name="anko_sv_schedule" type="id" />
+    <item name="anko_cl_content_panel" type="id" />
+    <item name="anko_empty_view" type="id" />
+    <item name="anko_layout" type="id" />
+    <item name="anko_bottom_sheet" type="id" />
+    <item name="anko_tv_title0" type="id" />
+    <item name="anko_tv_title1" type="id" />
+    <item name="anko_tv_title2" type="id" />
+    <item name="anko_tv_title3" type="id" />
+    <item name="anko_tv_title4" type="id" />
+    <item name="anko_tv_title5" type="id" />
+    <item name="anko_tv_title6" type="id" />
+    <item name="anko_tv_title7" type="id" />
+    <item name="tv_title0" type="id" />
+    <item name="tv_title1" type="id" />
+    <item name="tv_title2" type="id" />
+    <item name="tv_title3" type="id" />
+    <item name="tv_title4" type="id" />
+    <item name="tv_title5" type="id" />
+    <item name="tv_title6" type="id" />
+    <item name="tv_title7" type="id" />
+    <item name="tv_start" type="id" />
+    <item name="tv_end" type="id" />
+    <!-- 节次列（1~9 + 10~20 的 9x 系列命名） -->
+    <item name="anko_tv_node1" type="id" />
+    <item name="anko_tv_node2" type="id" />
+    <item name="anko_tv_node3" type="id" />
+    <item name="anko_tv_node4" type="id" />
+    <item name="anko_tv_node5" type="id" />
+    <item name="anko_tv_node6" type="id" />
+    <item name="anko_tv_node7" type="id" />
+    <item name="anko_tv_node8" type="id" />
+    <item name="anko_tv_node9" type="id" />
+    <item name="anko_ll_week_panel_0" type="id" />
+    <item name="anko_ll_week_panel_1" type="id" />
+    <item name="anko_ll_week_panel_2" type="id" />
+    <item name="anko_ll_week_panel_3" type="id" />
+    <item name="anko_ll_week_panel_4" type="id" />
+    <item name="anko_ll_week_panel_5" type="id" />
+    <item name="anko_ll_week_panel_6" type="id" />
+    <item name="anko_ll_week_panel_7" type="id" />
+    <!-- 表格菜单底部弹窗 -->
+    <item name="bottom_sheet_title_week" type="id" />
+    <item name="bottom_sheet_slider_week" type="id" />
+    <item name="bottom_sheet_change_week_btn" type="id" />
+    <item name="bottom_sheet_title_schedule" type="id" />
+    <item name="bottom_sheet_create_schedule_btn" type="id" />
+    <item name="bottom_sheet_manage_schedule_btn" type="id" />
+    <item name="bottom_sheet_rv_table" type="id" />
+    <item name="cl_table_select" type="id" />
+    <item name="iv_table_bg" type="id" />
+    <item name="menu_setting" type="id" />
+    <item name="tv_table_name" type="id" />
+    <!-- 底部菜单导航宫格 -->
+    <item name="main_nav_time" type="id" />
+    <item name="main_nav_schedule_setting" type="id" />
+    <item name="main_nav_course" type="id" />
+    <item name="main_nav_help" type="id" />
+    <item name="main_nav_about" type="id" />
+    <item name="main_nav_feedback" type="id" />
+    <item name="main_nav_settings" type="id" />
+    <item name="main_nav_suda" type="id" />
+    <!-- Cascade 风格锚定弹窗行 -->
+    <item name="cascade_content" type="id" />
+    <item name="cascade_icon" type="id" />
+    <item name="cascade_title" type="id" />
+    <!-- 近日课程空视图：显式声明，保证所有 layout qualifier 都生成稳定 R.id。 -->
+    <item name="empty_image_today" type="id" />
+    <item name="empty_text_today" type="id" />
+    <item name="empty_image_next_day" type="id" />
+    <item name="empty_text_next_day" type="id" />
+</resources>

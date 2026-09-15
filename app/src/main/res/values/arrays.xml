@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <array name="customizedColors">
+        <item>@color/red</item>
+        <item>@color/pink</item>
+        <item>@color/blue</item>
+        <item>@color/green</item>
+        <item>@color/purple</item>
+        <item>@color/orange</item>
+        <item>@color/deepOrange</item>
+        <item>@color/lightBlue</item>
+        <item>@color/ruri</item>
+    </array>
+</resources>

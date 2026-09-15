@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 课程详情底部弹窗布局；保留限定版本副本以稳定生成对应的 ViewBinding。 -->
+<androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_gravity="center"
+    android:minWidth="280dp"
+    android:minHeight="480dp"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:menu="@menu/course_detail_menu"
+        app:subtitle="2.0 学分"
+        app:subtitleTextAppearance="?attr/textAppearanceLabelSmall"
+        app:title="高等数学高等数学高等数学高等数学高等数学高等数学高等数学高等数学高等数学高等数学高等数学"
+        app:titleTextAppearance="?attr/textAppearanceTitleMedium" />
+
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/scrollView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- 一门课程可含多个时间段，全部条目由代码加入此容器并随外层滚动。 -->
+            <LinearLayout
+                android:id="@+id/ll_course_details"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/tv_time_conflict_courses"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginTop="24dp"
+                android:singleLine="true"
+                android:text="@string/time_conflict_courses"
+                android:textSize="12sp" />
+
+            <!-- 冲突课程仅用于信息展示，因此使用普通纵向列表容器。 -->
+            <LinearLayout
+                android:id="@+id/ll_time_conflict_courses"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp" />
+        </androidx.appcompat.widget.LinearLayoutCompat>
+    </androidx.core.widget.NestedScrollView>
+</androidx.appcompat.widget.LinearLayoutCompat>

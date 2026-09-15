@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 学校分类选中态直接使用设置组标题的 colorPrimary。 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="?attr/colorPrimary" android:state_checked="true" />
+    <item android:color="@android:color/transparent" />
+</selector>

@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!--
+        MaterialSwitch 全局动效节奏：覆盖 Material 3 默认的 250/100/150/100ms，
+        让拇指位移、形变前段、形变后段与按压反馈更容易被观察，同时保持各阶段比例协调。
+    -->
+    <integer name="mtrl_switch_thumb_motion_duration" tools:override="true">400</integer>
+    <integer name="mtrl_switch_thumb_pre_morphing_duration" tools:override="true">180</integer>
+    <integer name="mtrl_switch_thumb_post_morphing_duration" tools:override="true">240</integer>
+    <integer name="mtrl_switch_thumb_pressed_duration" tools:override="true">180</integer>
+</resources>

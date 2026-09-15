@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    小组件剩余课程提示使用的紧凑右箭头。
+    中心线路径与 ms_chevron_right_24 保持一致，固有尺寸仍为旧 PNG 的 12dp 画布。
+    描边使用原始 Material Symbols 线宽的 70%，并向下偏移约 0.67dp；在 xxhdpi 下对应下移 2px，
+    既降低箭头的视觉重量，也修正 TextView 复合图标相对文字基线略微偏上的问题。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="12dp"
+    android:height="12dp"
+    android:autoMirrored="false"
+    android:viewportWidth="629"
+    android:viewportHeight="595">
+    <group
+        android:translateX="-136"
+        android:translateY="810.5">
+        <path
+            android:fillColor="@android:color/transparent"
+            android:pathData="M376,-664 L560,-480 L376,-296"
+            android:strokeColor="#ff87888a"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="56" />
+    </group>
+</vector>

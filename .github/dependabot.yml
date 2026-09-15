@@ -1,0 +1,21 @@
+version: 2
+
+updates:
+  # 仅检查 CodeQL Action；init 与 analyze 使用同一依赖，因此会在同一个更新中保持 SHA 一致。
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      # 每周一、周四检查工作流依赖；cron 的时间按下方上海时区解释。
+      interval: cron
+      cronjob: "15 9 * * 1,4"
+      timezone: Asia/Shanghai
+    reviewers:
+      - LonelyMarch
+    open-pull-requests-limit: 1
+    allow:
+      # 其余 GitHub Actions 不由 Dependabot 检查，避免产生与 CodeQL 无关的更新 PR。
+      - dependency-name: github/codeql-action
+    commit-message:
+      prefix: ci
+      include: scope

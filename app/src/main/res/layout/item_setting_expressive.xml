@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?><!-- Expressive 分段设置项通用布局：
+     ListItemLayout 承载 first/middle/last/single 状态，
+     内部 ListItemCardView 使用 segmented 样式按状态自动切圆角；
+     横向内容 = leading 图标 + 文本（标题/说明）+ trailing（值/开关/箭头/色块）。
+     供 SettingsListAdapter 全部行类型（Value/Number/Toggle/Info）复用。 -->
+<com.google.android.material.listitem.ListItemLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="16dp"
+    android:layout_marginEnd="16dp">
+
+    <com.google.android.material.listitem.ListItemCardView
+        android:id="@+id/setting_card"
+        style="@style/Widget.OpenWakeUp.ListItemCardView.Segmented"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:checkable="false">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="44dp"
+            android:orientation="horizontal">
+
+            <!-- leading Material Symbol（20dp，可隐藏） -->
+            <ImageView
+                android:id="@+id/setting_icon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="16dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ms_chevron_right_24"
+                android:visibility="gone"
+                app:tint="?attr/colorOnSurfaceVariant" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <!-- 标题：Material ListItem 标签字阶 -->
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/setting_title"
+                    style="@style/Widget.Material3.TextView.ListItem.LabelText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <!-- 说明文字（可选）：Material ListItem 辅助字阶 -->
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/setting_support"
+                    style="@style/Widget.Material3.TextView.ListItem.SupportingText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- trailing：色块预览（颜色项，可选） -->
+            <View
+                android:id="@+id/setting_color"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:background="@drawable/setting_color_swatch_ring"
+                android:foreground="@drawable/setting_color_swatch_fill"
+                android:visibility="gone" />
+
+            <!-- trailing：当前值文本（Value/Number 行） -->
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/setting_value"
+                style="@style/Widget.Material3.TextView.ListItem.TrailingSupportingText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:ellipsize="end"
+                android:maxWidth="200dp"
+                android:singleLine="true"
+                android:visibility="gone" />
+
+            <!-- trailing：列表专用开关（Toggle 行；无独立焦点，整行点击等价切换；缩小一号） -->
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/setting_switch"
+                style="@style/Widget.OpenWakeUp.Switch.ListItem.Small"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:visibility="gone" />
+
+            <!-- trailing：进入下层箭头（Navigation 行） -->
+            <ImageView
+                android:id="@+id/setting_chevron"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ms_chevron_right_24"
+                android:visibility="gone"
+                app:tint="?attr/colorOnSurfaceVariant" />
+        </LinearLayout>
+    </com.google.android.material.listitem.ListItemCardView>
+</com.google.android.material.listitem.ListItemLayout>

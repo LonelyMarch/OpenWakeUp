@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 设置项尾部色块的填充层：白色底便于 foregroundTintList 按色值着色。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#FFFFFFFF" />
+</shape>

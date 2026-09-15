@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+    独立不透明度设置面板：与取色器中的 ARGB 透明度区域共用棋盘格轨道、
+    Material Slider 尺寸和百分比文案，供不需要修改 RGB 的设置项使用。
+-->
+<androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="280dp"
+    android:layout_height="wrap_content"
+    android:layout_gravity="center"
+    android:orientation="vertical">
+
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/tv_opacity_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="24dp"
+        android:layout_marginEnd="16dp"
+        android:gravity="center"
+        android:textStyle="bold" />
+
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/tv_opacity_value"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="24dp"
+        android:layout_marginEnd="16dp"
+        android:text="@string/color_opacity"
+        android:textAppearance="?attr/textAppearanceLabelLarge" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp">
+
+        <!-- 背景负责表达 ARGB；上层 Slider 只提供 Material 交互与无障碍语义。 -->
+        <com.openwakeup.schedule.core.designsystem.component.colorpicker.ArgbAlphaTrackView
+            android:id="@+id/opacity_track"
+            android:layout_width="match_parent"
+            android:layout_height="16dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:importantForAccessibility="no" />
+
+        <com.google.android.material.slider.Slider
+            android:id="@+id/slider_opacity"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/color_opacity"
+            android:stepSize="1"
+            android:valueFrom="0"
+            android:valueTo="100"
+            app:tickVisible="false"
+            app:trackColorActive="@android:color/transparent"
+            app:trackColorInactive="@android:color/transparent"
+            app:trackHeight="16dp"
+            app:trackStopIndicatorSize="0dp" />
+    </FrameLayout>
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_cancel"
+            style="@style/DialogButtonStyle"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:text="@string/cancel" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_save"
+            style="@style/DialogButtonStyle"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:text="@string/save"
+            android:textStyle="bold" />
+    </androidx.appcompat.widget.LinearLayoutCompat>
+</androidx.appcompat.widget.LinearLayoutCompat>

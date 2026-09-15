@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+    本文件仅保留工程内真实使用的自定义属性声明。
+
+    NumberPickerView / ColorPickerView 通过 obtainStyledAttributes 读取下面两个 declare-styleable，
+    Kotlin 代码统一使用生成的 R.styleable 索引，避免属性顺序与硬编码数字耦合。
+-->
+<resources>
+    <attr name="cpv_alphaChannelVisible" format="reference|boolean" />
+    <attr name="cpv_showAlphaSlider" format="reference|boolean" />
+    <attr name="cpv_sliderColor" format="reference|color" />
+    <attr name="npv_AlternativeHint" format="reference|string" />
+    <attr name="npv_AlternativeTextArrayWithMeasureHint" format="reference" />
+    <attr name="npv_AlternativeTextArrayWithoutMeasureHint" format="reference" />
+    <attr name="npv_DividerColor" format="reference|color" />
+    <attr name="npv_DividerHeight" format="reference|dimension" />
+    <attr name="npv_DividerMarginLeft" format="reference|dimension" />
+    <attr name="npv_DividerMarginRight" format="reference|dimension" />
+    <attr name="npv_EmptyItemHint" format="reference|string" />
+    <attr name="npv_HintText" format="reference|string" />
+    <attr name="npv_ItemPaddingHorizontal" format="reference|dimension" />
+    <attr name="npv_ItemPaddingVertical" format="reference|dimension" />
+    <attr name="npv_MarginEndOfHint" format="reference|dimension" />
+    <attr name="npv_MarginStartOfHint" format="reference|dimension" />
+    <attr name="npv_MaxValue" format="reference|integer" />
+    <attr name="npv_MinValue" format="reference|integer" />
+    <attr name="npv_RespondChangeInMainThread" format="reference|boolean" />
+    <attr name="npv_RespondChangeOnDetached" format="reference|boolean" />
+    <attr name="npv_ShowDivider" format="reference|boolean" />
+    <attr name="npv_ShownCount" format="reference|integer" />
+    <attr name="npv_TextArray" format="reference" />
+    <attr name="npv_TextColorHint" format="reference|color" />
+    <attr name="npv_TextColorNormal" format="reference|color" />
+    <attr name="npv_TextColorSelected" format="reference|color" />
+    <attr name="npv_TextEllipsize" format="reference|string" />
+    <attr name="npv_TextSizeHint" format="reference|dimension" />
+    <attr name="npv_TextSizeNormal" format="reference|dimension" />
+    <attr name="npv_TextSizeSelected" format="reference|dimension" />
+    <attr name="npv_WrapSelectorWheel" format="reference|boolean" />
+    <!-- 主题内 <item name="verticalRecyclerViewStyle"> 引用的自定义属性（见 styles.xml BaseAppTheme）。 -->
+    <attr name="verticalRecyclerViewStyle" format="reference" />
+    <declare-styleable name="ColorPickerView">
+        <attr name="cpv_showAlphaSlider" />
+        <attr name="cpv_sliderColor" />
+    </declare-styleable>
+    <declare-styleable name="NumberPickerView">
+        <attr name="npv_AlternativeHint" />
+        <attr name="npv_AlternativeTextArrayWithMeasureHint" />
+        <attr name="npv_AlternativeTextArrayWithoutMeasureHint" />
+        <attr name="npv_DividerColor" />
+        <attr name="npv_DividerHeight" />
+        <attr name="npv_DividerMarginLeft" />
+        <attr name="npv_DividerMarginRight" />
+        <attr name="npv_EmptyItemHint" />
+        <attr name="npv_HintText" />
+        <attr name="npv_ItemPaddingHorizontal" />
+        <attr name="npv_ItemPaddingVertical" />
+        <attr name="npv_MarginEndOfHint" />
+        <attr name="npv_MarginStartOfHint" />
+        <attr name="npv_MaxValue" />
+        <attr name="npv_MinValue" />
+        <attr name="npv_RespondChangeInMainThread" />
+        <attr name="npv_RespondChangeOnDetached" />
+        <attr name="npv_ShowDivider" />
+        <attr name="npv_ShownCount" />
+        <attr name="npv_TextArray" />
+        <attr name="npv_TextColorHint" />
+        <attr name="npv_TextColorNormal" />
+        <attr name="npv_TextColorSelected" />
+        <attr name="npv_TextEllipsize" />
+        <attr name="npv_TextSizeHint" />
+        <attr name="npv_TextSizeNormal" />
+        <attr name="npv_TextSizeSelected" />
+        <attr name="npv_WrapSelectorWheel" />
+    </declare-styleable>
+</resources>

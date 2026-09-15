@@ -1,0 +1,72 @@
+name: CodeQL
+
+on:
+  push:
+    branches:
+      - dev
+      - master
+  pull_request:
+    branches:
+      - dev
+      - master
+  schedule:
+    - cron: "23 18 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 个人私有仓库未启用 GitHub Code Security，无法上传 CodeQL 分析结果；仓库公开后自动执行。
+  analyze:
+    name: Analyze
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: 配置 JDK 21
+        # actions/setup-java v6；CodeQL 编译阶段与普通 CI 使用相同的 Temurin JDK 21。
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: 配置 Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699
+        with:
+          # 默认值包含已从 SDK 仓库移除的旧 `tools` 包，因此只安装仍受支持的平台工具。
+          packages: platform-tools
+
+      - name: 安装 Android 36.1 平台
+        shell: bash
+        run: sdkmanager "platforms;android-36.1"
+
+      - name: 配置 Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+
+      # github/codeql-action v4；手动构建可明确避免调用任何测试任务。
+      - name: 初始化 CodeQL
+        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63
+        with:
+          languages: java-kotlin
+          build-mode: manual
+          # 固定到已包含 Kotlin 2.4.20 支持的测试工具包；CodeQL 2.27.1 正式发布后移除此项。
+          tools: https://github.com/dsp-testing/codeql-cli-nightlies/releases/download/codeql-bundle-20260914/codeql-bundle-linux64.tar.gz
+
+      - name: 编译分析目标
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :parser:compileKotlin :app:compileDebugKotlin --stacktrace --console=plain
+
+      - name: 分析源码
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63

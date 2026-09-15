@@ -66,7 +66,9 @@ jobs:
         shell: bash
         run: |
           chmod +x ./gradlew
-          ./gradlew :parser:compileKotlin :app:compileDebugKotlin --stacktrace --console=plain
+          # CodeQL 的手动构建必须在初始化后真实调用 Kotlin 编译器；若任务命中 Gradle 构建缓存，
+          # 分析器将无法捕获源码，因此仅在此安全分析任务中禁用构建缓存并强制重新执行编译任务。
+          ./gradlew :parser:compileKotlin :app:compileDebugKotlin --no-build-cache --rerun-tasks --stacktrace --console=plain
 
       - name: 分析源码
         uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63

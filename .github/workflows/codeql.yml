@@ -1,17 +1,11 @@
 name: CodeQL
 
 on:
-  push:
-    branches:
-      - dev
-      - master
+  # 日常开发直接提交到 dev 时由普通 CI 负责质量检查；
+  # 只有准备发布并向 master 发起 PR 时，才执行耗时较长的 CodeQL 安全分析。
   pull_request:
     branches:
-      - dev
       - master
-  schedule:
-    - cron: "23 18 * * 1"
-  workflow_dispatch:
 
 permissions:
   contents: read

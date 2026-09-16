@@ -1,11 +1,13 @@
 package com.openwakeup.schedule.core.util
 
+import android.annotation.SuppressLint
 import android.net.Uri
 import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.webkit.WebResourceResponseCompat
+import androidx.webkit.WebViewFeature
 import okhttp3.Call
 import okhttp3.CookieJar
 import okhttp3.Headers
@@ -364,10 +366,30 @@ class WebGetRequestInterceptor(
             storeCookies(requestUrl, responseCookies)
             if (cookieInterceptEnabled && redirectCount == 0 && requestUrl == initialUrl) {
                 // 无重定向时 AndroidX 能以真实请求上下文处理 SameSite、第三方及分区 Cookie。
-                compatResponse.setCookies(responseCookies)
+                setInterceptedResponseCookies(compatResponse, responseCookies)
             }
         }
         return compatResponse.toWebResourceResponse()
+    }
+
+    /**
+     * 在当前 WebView Provider 支持 Cookie Intercept 时，把响应 Cookie 精确交回 WebView。
+     *
+     * WebKit 1.17.0 已公开 `COOKIE_INTERCEPT`，但其 `WebViewSupportFeature` 的 StringDef
+     * 遗漏了该常量。这里仅抑制该上游元数据导致的 `WrongConstant`，并继续执行真实能力检查；
+     * 检查和 [WebResourceResponseCompat.setCookies] 位于同一函数，也让 Lint 能验证
+     * `RequiresFeature` 约束已经满足。
+     *
+     * @param response 即将转换给 WebView 的兼容响应
+     * @param cookies 服务端返回的独立 Set-Cookie 值
+     */
+    @SuppressLint("WrongConstant")
+    private fun setInterceptedResponseCookies(
+        response: WebResourceResponseCompat,
+        cookies: List<String>,
+    ) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.COOKIE_INTERCEPT)) return
+        response.setCookies(cookies)
     }
 
     /**

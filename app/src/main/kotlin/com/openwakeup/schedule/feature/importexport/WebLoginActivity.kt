@@ -285,7 +285,11 @@ class WebLoginActivity : AppCompatActivity() {
      *
      * 不支持该能力时，GET 工具会退回 [CookieManager.getCookie]；该兼容路径不会影响
      * `X-Requested-With` 的删除保证，但复杂 Cookie 场景需要以真机验证结果为准。
+     *
+     * WebKit 1.17.0 已公开 `COOKIE_INTERCEPT`，但其 `WebViewSupportFeature` 的 StringDef
+     * 遗漏了该常量，因此这里只抑制 `WrongConstant`；运行时能力检查仍必须保留。
      */
+    @SuppressLint("WrongConstant")
     private fun configureInterceptedRequestCookies() {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.COOKIE_INTERCEPT)) return
         cookieInterceptEnabled = runCatching {
@@ -323,10 +327,7 @@ class WebLoginActivity : AppCompatActivity() {
 
         if (cookieInterceptEnabled) {
             runCatching {
-                val settings = controller.serviceWorkerWebSettings
-                previousServiceWorkerCookieIntercept =
-                    settings.isIncludeCookiesOnShouldInterceptRequestEnabled()
-                settings.setIncludeCookiesOnShouldInterceptRequestEnabled(true)
+                configureServiceWorkerCookieIntercept(controller)
             }
         }
         controller.setServiceWorkerClient(
@@ -340,6 +341,27 @@ class WebLoginActivity : AppCompatActivity() {
                 }
             },
         )
+    }
+
+    /**
+     * 在特性受支持时启用 Service Worker 请求 Cookie，并保存进入页面前的设置。
+     *
+     * 主 WebView 已启用 Cookie Intercept 才会调用本函数；这里仍重新检查当前 Provider，避免
+     * WebView 在页面生命周期中更新后直接调用已不受支持的 API。WebKit 1.17.0 的 StringDef
+     * 遗漏了该正式常量，因此仅在这个最小兼容边界抑制 `WrongConstant`。
+     *
+     * @param controller 当前进程的 Service Worker 控制器
+     */
+    @SuppressLint("WrongConstant")
+    private fun configureServiceWorkerCookieIntercept(
+        controller: ServiceWorkerControllerCompat,
+    ) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.COOKIE_INTERCEPT)) return
+
+        val settings = controller.serviceWorkerWebSettings
+        previousServiceWorkerCookieIntercept =
+            settings.isIncludeCookiesOnShouldInterceptRequestEnabled()
+        settings.setIncludeCookiesOnShouldInterceptRequestEnabled(true)
     }
 
     /** 解除进程级 Service Worker 客户端，并恢复为进入页面前的网络阻断状态。 */
@@ -356,14 +378,28 @@ class WebLoginActivity : AppCompatActivity() {
             }
         }
         previousServiceWorkerCookieIntercept?.let { previousValue ->
-            if (WebViewFeature.isFeatureSupported(WebViewFeature.COOKIE_INTERCEPT)) {
-                controller.serviceWorkerWebSettings
-                    .setIncludeCookiesOnShouldInterceptRequestEnabled(previousValue)
-            }
+            restoreServiceWorkerCookieIntercept(controller, previousValue)
         }
         previousServiceWorkerBlockNetworkLoads = null
         previousServiceWorkerCookieIntercept = null
         serviceWorkerController = null
+    }
+
+    /**
+     * 在特性仍受支持时恢复进入页面前的 Service Worker Cookie Intercept 设置。
+     *
+     * @param controller 当前进程的 Service Worker 控制器
+     * @param previousValue 进入教务导入页面前的 Cookie Intercept 开关值
+     */
+    @SuppressLint("WrongConstant")
+    private fun restoreServiceWorkerCookieIntercept(
+        controller: ServiceWorkerControllerCompat,
+        previousValue: Boolean,
+    ) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.COOKIE_INTERCEPT)) return
+
+        controller.serviceWorkerWebSettings
+            .setIncludeCookiesOnShouldInterceptRequestEnabled(previousValue)
     }
 
     /**

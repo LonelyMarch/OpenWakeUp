@@ -14,6 +14,7 @@ import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -27,6 +28,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import androidx.webkit.CustomHeader
+import androidx.webkit.ServiceWorkerClientCompat
+import androidx.webkit.ServiceWorkerControllerCompat
 import androidx.webkit.UserAgentMetadata
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
@@ -38,6 +41,7 @@ import com.openwakeup.parser.ParserFactory
 import com.openwakeup.parser.ParserInput
 import com.openwakeup.schedule.R
 import com.openwakeup.schedule.core.config.AppDefaults
+import com.openwakeup.schedule.core.util.WebGetRequestInterceptor
 import com.openwakeup.schedule.data.schedule.ScheduleRepository
 import com.openwakeup.schedule.databinding.ActivityWebLoginBinding
 import kotlinx.coroutines.Dispatchers
@@ -63,8 +67,27 @@ class WebLoginActivity : AppCompatActivity() {
     private val type: String by lazy { intent.getStringExtra(EXTRA_TYPE).orEmpty() }
     private val schoolName: String by lazy { intent.getStringExtra(EXTRA_NAME).orEmpty() }
     private val mobileUserAgent: String by lazy { WebSettings.getDefaultUserAgent(this) }
+
+    /** GET 代发发生在 WebView 工作线程，模式状态需要保证跨线程可见。 */
+    @Volatile
     private var isDesktopMode = true
+
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+
+    /** 为所有 HTTP/HTTPS GET 提供不含 X-Requested-With 的原生响应。 */
+    private lateinit var getRequestInterceptor: WebGetRequestInterceptor
+
+    /** 当前页面安装的全局 Service Worker 控制器，销毁时用于解除请求拦截。 */
+    private var serviceWorkerController: ServiceWorkerControllerCompat? = null
+
+    /** 旧 WebView 无法拦截 Service Worker 时暂时保存其原网络阻断状态。 */
+    private var previousServiceWorkerBlockNetworkLoads: Boolean? = null
+
+    /** 保存 Service Worker 原 Cookie 拦截状态，页面销毁时恢复进程级配置。 */
+    private var previousServiceWorkerCookieIntercept: Boolean? = null
+
+    /** WebView 是否支持在拦截回调中提供精确 Cookie 请求上下文。 */
+    private var cookieInterceptEnabled = false
 
     /** 防止渲染进程异常回调和 Activity 销毁流程重复释放同一个 WebView。 */
     private var webViewDestroyed = false
@@ -94,6 +117,17 @@ class WebLoginActivity : AppCompatActivity() {
         title = getString(R.string.web_login_title, schoolName)
         binding.btnBack.setOnClickListener { finish() }
         configureWebView()
+        getRequestInterceptor = WebGetRequestInterceptor(
+            userAgentProvider = {
+                if (isDesktopMode) WINDOWS_DESKTOP_USER_AGENT else mobileUserAgent
+            },
+            additionalHeadersProvider = {
+                if (isDesktopMode) WIN11_CHROME_HEADERS else emptyMap()
+            },
+            forbiddenRequestedWithValue = packageName,
+            cookieInterceptEnabled = cookieInterceptEnabled,
+        )
+        configureServiceWorkerInterception()
         binding.webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 binding.editUrl.setText(url)
@@ -118,6 +152,21 @@ class WebLoginActivity : AppCompatActivity() {
                     startActivity(Intent(Intent.ACTION_VIEW, uri))
                     true
                 }.getOrDefault(false)
+            }
+
+            /**
+             * 接管全部普通 HTTP/HTTPS GET，由原生网络层返回非空响应。
+             *
+             * 非 GET 保持原来的 WebView 网络行为；已识别为 GET 的请求即使原生访问失败，也由
+             * [WebGetRequestInterceptor] 返回本地错误响应，不能返回 `null` 触发 WebView 兜底。
+             */
+            override fun shouldInterceptRequest(
+                view: WebView?,
+                request: WebResourceRequest?,
+            ): WebResourceResponse? {
+                val currentRequest = request ?: return null
+                if (!getRequestInterceptor.shouldIntercept(currentRequest)) return null
+                return getRequestInterceptor.intercept(currentRequest)
             }
 
             /**
@@ -226,8 +275,95 @@ class WebLoginActivity : AppCompatActivity() {
         binding.webView.isHorizontalScrollBarEnabled = true
         binding.webView.isVerticalScrollBarEnabled = true
         binding.webView.setInitialScale(0)
+        configureInterceptedRequestCookies()
         configurePersistentRequestHeaders()
         applyDeviceMode(reload = false)
+    }
+
+    /**
+     * 在 WebView 支持时，把浏览器已按 SameSite、第三方与分区规则筛选的 Cookie 放进拦截请求。
+     *
+     * 不支持该能力时，GET 工具会退回 [CookieManager.getCookie]；该兼容路径不会影响
+     * `X-Requested-With` 的删除保证，但复杂 Cookie 场景需要以真机验证结果为准。
+     */
+    private fun configureInterceptedRequestCookies() {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.COOKIE_INTERCEPT)) return
+        cookieInterceptEnabled = runCatching {
+            WebSettingsCompat.setCookiesIncludedInShouldInterceptRequest(
+                binding.webView.settings,
+                true,
+            )
+            true
+        }.getOrDefault(false)
+    }
+
+    /**
+     * 让 Service Worker 发起的 HTTP/HTTPS GET 复用同一个原生代发工具。
+     *
+     * Service Worker 控制器是进程级对象。当前 WebView 不支持请求拦截时，为避免出现绕过路径，
+     * 临时阻断 Service Worker 网络访问，并在页面销毁时恢复进入页面前的状态。
+     */
+    private fun configureServiceWorkerInterception() {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_BASIC_USAGE)) return
+        val controller = ServiceWorkerControllerCompat.getInstance()
+        serviceWorkerController = controller
+
+        if (
+            !WebViewFeature.isFeatureSupported(
+                WebViewFeature.SERVICE_WORKER_SHOULD_INTERCEPT_REQUEST,
+            )
+        ) {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_BLOCK_NETWORK_LOADS)) {
+                val settings = controller.serviceWorkerWebSettings
+                previousServiceWorkerBlockNetworkLoads = settings.getBlockNetworkLoads()
+                settings.setBlockNetworkLoads(true)
+            }
+            return
+        }
+
+        if (cookieInterceptEnabled) {
+            runCatching {
+                val settings = controller.serviceWorkerWebSettings
+                previousServiceWorkerCookieIntercept =
+                    settings.isIncludeCookiesOnShouldInterceptRequestEnabled()
+                settings.setIncludeCookiesOnShouldInterceptRequestEnabled(true)
+            }
+        }
+        controller.setServiceWorkerClient(
+            object : ServiceWorkerClientCompat() {
+                /** Service Worker GET 同样失败关闭；非 GET 不在本次改造范围内。 */
+                override fun shouldInterceptRequest(
+                    request: WebResourceRequest,
+                ): WebResourceResponse? {
+                    if (!getRequestInterceptor.shouldIntercept(request)) return null
+                    return getRequestInterceptor.intercept(request)
+                }
+            },
+        )
+    }
+
+    /** 解除进程级 Service Worker 客户端，并恢复为进入页面前的网络阻断状态。 */
+    private fun clearServiceWorkerInterception() {
+        val controller = serviceWorkerController ?: return
+        controller.setServiceWorkerClient(null)
+        previousServiceWorkerBlockNetworkLoads?.let { previousValue ->
+            if (
+                WebViewFeature.isFeatureSupported(
+                    WebViewFeature.SERVICE_WORKER_BLOCK_NETWORK_LOADS,
+                )
+            ) {
+                controller.serviceWorkerWebSettings.setBlockNetworkLoads(previousValue)
+            }
+        }
+        previousServiceWorkerCookieIntercept?.let { previousValue ->
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.COOKIE_INTERCEPT)) {
+                controller.serviceWorkerWebSettings
+                    .setIncludeCookiesOnShouldInterceptRequestEnabled(previousValue)
+            }
+        }
+        previousServiceWorkerBlockNetworkLoads = null
+        previousServiceWorkerCookieIntercept = null
+        serviceWorkerController = null
     }
 
     /**
@@ -510,6 +646,8 @@ class WebLoginActivity : AppCompatActivity() {
     private fun disposeWebView(webView: WebView) {
         if (webViewDestroyed) return
         webViewDestroyed = true
+        clearServiceWorkerInterception()
+        if (::getRequestInterceptor.isInitialized) getRequestInterceptor.close()
         webView.stopLoading()
         webView.webChromeClient = null
         (webView.parent as? ViewGroup)?.removeView(webView)

@@ -6,19 +6,25 @@ import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.webkit.WebResourceResponseCompat
+import okhttp3.Call
+import okhttp3.CookieJar
+import okhttp3.Headers
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.Closeable
 import java.io.FilterInputStream
 import java.io.InputStream
 import java.net.CookiePolicy
-import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
 import java.net.URLConnection
 import java.util.Locale
 import java.util.TreeMap
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -26,8 +32,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Android WebView 会在应用的 `shouldInterceptRequest` 回调结束后再向直连请求注入
  * `X-Requested-With`。本工具对 GET 请求始终返回应用生成的 [WebResourceResponse]，并使用
- * [HttpURLConnection] 独立访问服务器，使 WebView 原始 GET 不会离开设备。原生请求在首跳和
- * 每一次重定向中都会按大小写不敏感规则排除 `X-Requested-With`。
+ * [OkHttpClient] 独立访问服务器，使 WebView 原始 GET 不会离开设备。原生请求在首跳和每一次
+ * 重定向中都会删除等于应用包名的 `X-Requested-With`，同时保留网页自己的 AJAX 标记。
  *
  * 非 GET、非 HTTP/HTTPS 请求不属于本工具的处理范围，调用方可让 WebView 按原行为处理。
  * 已进入本工具的 GET 即使失败也会返回本地错误响应，不能返回 `null` 触发 WebView 兜底。
@@ -57,8 +63,8 @@ class WebGetRequestInterceptor(
      */
     private val redirectCookieManager = java.net.CookieManager(null, CookiePolicy.ACCEPT_ALL)
 
-    /** 正在向服务器读取数据的连接；Activity 销毁时统一断开，避免后台继续持有页面。 */
-    private val activeConnections = ConcurrentHashMap.newKeySet<HttpURLConnection>()
+    /** 正在执行或仍由 WebView 读取响应体的调用；Activity 销毁时统一取消。 */
+    private val activeCalls = ConcurrentHashMap.newKeySet<Call>()
 
     /** 关闭后所有新请求均返回本地错误页，不允许重新落入 WebView 网络栈。 */
     private val closed = AtomicBoolean(false)
@@ -138,16 +144,19 @@ class WebGetRequestInterceptor(
                     message = "Loopback request blocked",
                 )
             }
-            val connection = openConnection(currentUrl, requestHeaders)
-            activeConnections += connection
+            val call = createCall(currentUrl, requestHeaders)
+            activeCalls += call
             if (closed.get()) {
-                // 关闭动作可能恰好发生在创建连接与登记连接之间；登记后再次检查可封住该竞态窗口。
-                closeConnection(connection)
+                // 关闭动作可能恰好发生在创建 Call 与登记 Call 之间；登记后再次检查可封住该竞态窗口。
+                cancelCall(call)
                 error("Interceptor has been closed")
             }
 
+            var response: Response? = null
             try {
-                val statusCode = connection.responseCode
+                val networkResponse = call.execute()
+                response = networkResponse
+                val statusCode = networkResponse.code
                 if (navigationRequest) {
                     val elapsedMs = (System.nanoTime() - requestStartedAtNanos) / NANOS_PER_MILLISECOND
                     if (elapsedMs >= SLOW_NAVIGATION_LOG_THRESHOLD_MS) {
@@ -155,25 +164,25 @@ class WebGetRequestInterceptor(
                         Log.i(LOG_TAG, "导航 GET 响应头耗时 ${elapsedMs}ms，状态 $statusCode")
                     }
                 }
-                val responseHeaders = connection.headerFields
-                val responseCookies = responseHeaderValues(responseHeaders, SET_COOKIE_HEADER)
+                val responseCookies = networkResponse.headers.values(SET_COOKIE_HEADER)
 
                 if (statusCode in REDIRECT_STATUS_CODES) {
-                    val location = firstResponseHeader(responseHeaders, LOCATION_HEADER)
+                    val location = networkResponse.header(LOCATION_HEADER)
                         ?: error("Redirect response misses Location")
                     if (redirectCount >= MAX_REDIRECTS) error("Too many redirects")
 
                     // WebView 不会再次可靠回调重定向后的请求，因此每一跳 Cookie 与请求头都在原生层更新。
                     storeCookies(currentUrl, responseCookies)
-                    val nextUrl = URL(URL(currentUrl), location).toString()
+                    val nextUrl = networkResponse.request.url.resolve(location)?.toString()
+                        ?: error("Unsupported redirect Location")
                     require(URL(nextUrl).protocol.lowercase(Locale.ROOT) in HTTP_SCHEMES) {
                         "Unsupported redirect protocol"
                     }
-                    if (isNavigationRequest(request)) {
+                    if (navigationRequest) {
                         // 自己吞掉顶层或 iframe 导航重定向会让 WebView 继续沿用首跳 URL 与 Origin，
                         // 造成相对资源错位甚至空白。返回仅执行 location.replace 的本地页面，让
                         // 下一跳成为新的导航 GET，并再次经过同一个拦截器。
-                        closeConnection(connection)
+                        closeResponse(networkResponse, call)
                         return createNavigationRedirectResponse(nextUrl)
                     }
                     requestHeaders = buildRedirectHeaders(
@@ -181,7 +190,7 @@ class WebGetRequestInterceptor(
                         previousUrl = currentUrl,
                         nextUrl = nextUrl,
                     )
-                    closeConnection(connection)
+                    closeResponse(networkResponse, call)
                     currentUrl = nextUrl
                     redirectCount += 1
                     continue
@@ -190,57 +199,49 @@ class WebGetRequestInterceptor(
                 // WebResourceResponse 明确不支持 3xx；未识别的 3xx 必须失败关闭，不能交给 WebView 跟随。
                 check(statusCode !in 300..399) { "Unsupported redirect status" }
                 return createNetworkResponse(
-                    connection = connection,
+                    response = networkResponse,
+                    call = call,
                     requestUrl = currentUrl,
                     initialUrl = initialUrl,
-                    statusCode = statusCode,
-                    responseHeaders = responseHeaders,
                     responseCookies = responseCookies,
                     redirectCount = redirectCount,
                 )
             } catch (error: Throwable) {
-                closeConnection(connection)
+                // 在最终响应所有权交给 WebView 前发生异常时，必须同时释放响应体并取消调用。
+                response?.close()
+                cancelCall(call)
                 throw error
             }
         }
     }
 
     /**
-     * 创建配置完整、不会自动重定向的原生连接。
+     * 创建配置完整、不会自动重定向的 OkHttp 调用。
      *
      * @param url 当前跳转地址
      * @param headers 已过滤的请求头
+     * @return 尚未执行、可加入生命周期集合的 Call
      */
-    private fun openConnection(
+    private fun createCall(
         url: String,
         headers: Map<String, String>,
-    ): HttpURLConnection {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        connection.requestMethod = GET_METHOD
-        connection.instanceFollowRedirects = false
-        connection.connectTimeout = CONNECT_TIMEOUT_MS
-        connection.readTimeout = READ_TIMEOUT_MS
-        connection.useCaches = true
-        connection.doInput = true
+    ): Call {
+        val requestBuilder = Request.Builder()
+            .url(url)
+            .get()
 
         headers.forEach { (name, value) ->
-            // CR/LF 会构成请求头注入；遇到非法值时直接忽略该普通头，而不是放宽校验。
+            // CR/LF 会构成请求头注入；遇到非法值时忽略该普通头，不使用不安全 API 放宽校验。
             if ('\r' !in value && '\n' !in value) {
-                connection.setRequestProperty(name, value)
+                runCatching { requestBuilder.header(name, value) }
             }
         }
-        // 不显式设置 Accept-Encoding：Android HttpURLConnection 可使用其透明 gzip 路径，
-        // 相比强制 identity 能显著减少脚本、样式和 HTML 的传输量。
-        val requestedWithValues = connection.requestProperties.entries
-            .firstOrNull { (name, _) ->
-                name.equals(X_REQUESTED_WITH_HEADER, ignoreCase = true)
-            }
-            ?.value
-            .orEmpty()
-        check(requestedWithValues.none(::isForbiddenRequestedWithValue)) {
+        // 不显式设置 Accept-Encoding，让 OkHttp 自动添加 gzip 并在返回 WebView 前透明解压。
+        val nativeRequest = requestBuilder.build()
+        check(nativeRequest.headers.values(X_REQUESTED_WITH_HEADER).none(::isForbiddenRequestedWithValue)) {
             "Forbidden X-Requested-With value"
         }
-        return connection
+        return sharedClient.newCall(nativeRequest)
     }
 
     /**
@@ -258,7 +259,7 @@ class WebGetRequestInterceptor(
             if (isForwardableRequestHeader(name)) headers[name] = value
         }
 
-        // UA 必须和 WebView 当前手机/电脑模式一致；禁止沿用 HttpURLConnection 自己的默认 UA。
+        // UA 必须和 WebView 当前手机/电脑模式一致；禁止沿用 OkHttp 自己的默认 UA。
         headers[USER_AGENT_HEADER] = userAgentProvider()
         val webViewCookie = findHeader(request.requestHeaders, COOKIE_HEADER)
             ?: runCatching { cookieManager.getCookie(request.url.toString()) }.getOrNull()
@@ -319,31 +320,33 @@ class WebGetRequestInterceptor(
     }
 
     /**
-     * 把最终原生响应转换为 WebView 响应，并将连接所有权交给响应流。
+     * 把最终 OkHttp 响应转换为 WebView 响应，并将响应所有权交给响应流。
+     *
+     * @param response 已取得响应头、尚未关闭响应体的 OkHttp 响应
+     * @param call 与响应关联的调用，用于在流关闭后退出活动集合
      */
     private fun createNetworkResponse(
-        connection: HttpURLConnection,
+        response: Response,
+        call: Call,
         requestUrl: String,
         initialUrl: String,
-        statusCode: Int,
-        responseHeaders: Map<String?, List<String>?>,
         responseCookies: List<String>,
         redirectCount: Int,
     ): WebResourceResponse {
+        val statusCode = response.code
         check(statusCode in 100..599 && statusCode !in 300..399) { "Invalid response status" }
         val contentType = parseContentType(
-            firstResponseHeader(responseHeaders, CONTENT_TYPE_HEADER),
+            response.body.contentType()?.toString() ?: response.header(CONTENT_TYPE_HEADER),
             requestUrl,
         )
-        val webHeaders = flattenResponseHeaders(responseHeaders)
-        val rawStream = responseBodyStream(connection, statusCode)
-        val responseStream = if (rawStream == null) {
-            closeConnection(connection)
+        val webHeaders = flattenResponseHeaders(response.headers)
+        val responseStream = if (statusCode == HTTP_NO_CONTENT || statusCode == HTTP_NOT_MODIFIED) {
+            // 这两类响应按协议没有正文，立即释放底层 Response，无需等待 WebView 关闭空流。
+            closeResponse(response, call)
             ByteArrayInputStream(ByteArray(0))
         } else {
-            DisconnectingInputStream(rawStream) {
-                activeConnections -= connection
-                connection.disconnect()
+            ResponseClosingInputStream(response.body.byteStream()) {
+                closeResponse(response, call)
             }
         }
 
@@ -351,7 +354,7 @@ class WebGetRequestInterceptor(
             contentType.mimeType,
             contentType.charset,
             statusCode,
-            safeReasonPhrase(statusCode, connection.responseMessage),
+            safeReasonPhrase(statusCode, response.message),
             webHeaders,
             responseStream,
         )
@@ -367,32 +370,18 @@ class WebGetRequestInterceptor(
         return compatResponse.toWebResourceResponse()
     }
 
-    /** 根据响应状态选择正常流或错误流。 */
-    private fun responseBodyStream(connection: HttpURLConnection, statusCode: Int): InputStream? {
-        if (
-            statusCode == HttpURLConnection.HTTP_NO_CONTENT ||
-            statusCode == HttpURLConnection.HTTP_NOT_MODIFIED
-        ) {
-            return null
-        }
-        return if (statusCode >= HttpURLConnection.HTTP_BAD_REQUEST) {
-            connection.errorStream
-        } else {
-            connection.inputStream
-        }
-    }
-
     /**
      * 把响应头压缩成 WebResourceResponse 支持的单值 Map。
      *
      * `Set-Cookie` 单独处理，不能用逗号连接；逐跳字段也不能转交给 WebView。
      */
     private fun flattenResponseHeaders(
-        headers: Map<String?, List<String>?>,
+        headers: Headers,
     ): Map<String, String> {
         val result = TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER)
-        headers.forEach { (name, values) ->
-            if (name == null || values.isNullOrEmpty()) return@forEach
+        headers.names().forEach { name ->
+            val values = headers.values(name)
+            if (values.isEmpty()) return@forEach
             if (name.lowercase(Locale.ROOT) in FORBIDDEN_RESPONSE_HEADERS) return@forEach
             result[name] = values.joinToString(", ")
         }
@@ -447,7 +436,7 @@ class WebGetRequestInterceptor(
         }
     }
 
-    /** 按大小写不敏感规则判断普通请求头是否允许交给 HttpURLConnection。 */
+    /** 按大小写不敏感规则判断普通请求头是否允许交给 OkHttp。 */
     private fun isForwardableRequestHeader(name: String): Boolean {
         return name.lowercase(Locale.ROOT) !in FORBIDDEN_REQUEST_HEADERS
     }
@@ -501,24 +490,6 @@ class WebGetRequestInterceptor(
         return headers.entries.firstOrNull { (name, _) ->
             name.equals(targetName, ignoreCase = true)
         }?.value
-    }
-
-    /** 从响应头 Map 中读取首个同名字段。 */
-    private fun firstResponseHeader(
-        headers: Map<String?, List<String>?>,
-        targetName: String,
-    ): String? = responseHeaderValues(headers, targetName).firstOrNull()
-
-    /** 从响应头 Map 中读取全部同名字段，保留多个 Set-Cookie 的独立边界。 */
-    private fun responseHeaderValues(
-        headers: Map<String?, List<String>?>,
-        targetName: String,
-    ): List<String> {
-        return headers.entries.asSequence()
-            .filter { (name, _) -> name?.equals(targetName, ignoreCase = true) == true }
-            .flatMap { (_, values) -> values.orEmpty().asSequence() }
-            .filter { value -> value.isNotBlank() }
-            .toList()
     }
 
     /** 比较两个 URL 的协议、主机和有效端口。 */
@@ -580,7 +551,7 @@ class WebGetRequestInterceptor(
         return WebResourceResponse(
             mimeType,
             UTF_8_ENCODING,
-            HttpURLConnection.HTTP_BAD_GATEWAY,
+            HTTP_BAD_GATEWAY,
             "Bad Gateway",
             mapOf(
                 CACHE_CONTROL_HEADER to NO_STORE_CACHE_CONTROL,
@@ -603,28 +574,34 @@ class WebGetRequestInterceptor(
         return WebResourceResponse(
             HTML_MIME_TYPE,
             UTF_8_ENCODING,
-            HttpURLConnection.HTTP_OK,
+            HTTP_OK,
             "OK",
             mapOf(CACHE_CONTROL_HEADER to NO_STORE_CACHE_CONTROL),
             ByteArrayInputStream(body.toByteArray(Charsets.UTF_8)),
         )
     }
 
-    /** 关闭中间响应或异常连接，不再把该请求交还给 WebView。 */
-    private fun closeConnection(connection: HttpURLConnection) {
-        runCatching { connection.errorStream?.close() }
-        runCatching { connection.inputStream?.close() }
-        activeConnections -= connection
-        connection.disconnect()
+    /**
+     * 关闭一个已收到响应的调用，并从 Activity 生命周期集合移除。
+     *
+     * [Response.close] 会关闭其 ResponseBody；重复调用是安全的，因此异常清理可以复用本方法。
+     */
+    private fun closeResponse(response: Response, call: Call) {
+        runCatching { response.close() }
+        activeCalls -= call
+    }
+
+    /** 取消尚在连接、读取响应头或读取响应体的调用。 */
+    private fun cancelCall(call: Call) {
+        runCatching { call.cancel() }
+        activeCalls -= call
     }
 
     /** Activity 销毁后终止所有仍在进行的 GET。 */
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
-        activeConnections.toList().forEach { connection ->
-            runCatching { connection.disconnect() }
-        }
-        activeConnections.clear()
+        activeCalls.toList().forEach(::cancelCall)
+        activeCalls.clear()
         redirectCookieManager.cookieStore.removeAll()
     }
 
@@ -635,12 +612,12 @@ class WebGetRequestInterceptor(
     )
 
     /**
-     * WebView 关闭响应体时同步断开 HttpURLConnection。
+     * WebView 关闭响应体时同步关闭 OkHttp Response，并释放对应 Call 的生命周期登记。
      *
      * @param delegate 服务器响应流
-     * @param onClosed 从活动连接集合移除并断开连接的回调
+     * @param onClosed 关闭 Response 并从活动 Call 集合移除的回调
      */
-    private class DisconnectingInputStream(
+    private class ResponseClosingInputStream(
         delegate: InputStream,
         private val onClosed: () -> Unit,
     ) : FilterInputStream(delegate) {
@@ -658,23 +635,37 @@ class WebGetRequestInterceptor(
     }
 
     private companion object {
+        /**
+         * WebView GET 代发进程内共享客户端。
+         *
+         * Cookie 与重定向必须继续由本工具桥接，因此客户端不保存 Cookie、也不自动跟随重定向。
+         * 所有拦截器实例共享 Dispatcher、连接池与 HTTP/2 连接；Activity 销毁时只取消自己的
+         * [Call]，不能关闭这些进程级资源。
+         */
+        private val sharedClient: OkHttpClient by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+            OkHttpClient.Builder()
+                // 明确保持 OkHttp 5 的 Fast Fallback：首选地址族迟滞时并行尝试另一地址族。
+                .fastFallback(true)
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .cookieJar(CookieJar.NO_COOKIES)
+                .retryOnConnectionFailure(true)
+                .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .build()
+        }
+
         /** 仅接管普通 Web GET。 */
         const val GET_METHOD = "GET"
 
         /** 支持的远程网页协议。 */
         val HTTP_SCHEMES = setOf("http", "https")
 
-        /**
-         * 单次连接建立超时。
-         *
-         * 教务域名同时发布 IPv4 与 IPv6；部分移动网络的首选地址会黑洞。原 15 秒值会使首次
-         * 页面导航恰好停顿约 15 秒，缩短后可让底层更早尝试备用地址，同时仍给正常 3G/4G
-         * TCP 与 TLS 握手留下充足时间。
-         */
-        const val CONNECT_TIMEOUT_MS = 4_000
+        /** 单个地址建立 TCP/TLS 连接的上限；双栈切换由 Fast Fallback 提前并行触发。 */
+        const val CONNECT_TIMEOUT_SECONDS = 10L
 
-        /** 响应读取超时。 */
-        const val READ_TIMEOUT_MS = 30_000
+        /** 已连接后读取响应数据的超时。 */
+        const val READ_TIMEOUT_SECONDS = 30L
 
         /** 纳秒换算毫秒。 */
         const val NANOS_PER_MILLISECOND = 1_000_000L
@@ -709,6 +700,10 @@ class WebGetRequestInterceptor(
         const val HTML_MIME_TYPE = "text/html"
         const val PLAIN_TEXT_MIME_TYPE = "text/plain"
         const val DEFAULT_BINARY_MIME_TYPE = "application/octet-stream"
+        const val HTTP_OK = 200
+        const val HTTP_NO_CONTENT = 204
+        const val HTTP_NOT_MODIFIED = 304
+        const val HTTP_BAD_GATEWAY = 502
 
         /** 能够建立独立 Document 上下文的 Fetch 目标。 */
         val DOCUMENT_FETCH_DESTINATIONS = setOf("document", "iframe", "frame")
@@ -723,7 +718,7 @@ class WebGetRequestInterceptor(
         /** 仅用于记录不含地址与凭据的诊断信息。 */
         const val LOG_TAG = "OpenWakeUpWebGet"
 
-        /** WebView 不能转发、应由 HttpURLConnection 自行生成或会影响缓存正确性的请求头。 */
+        /** WebView 不能转发、应由 OkHttp 自行生成或会影响缓存正确性的请求头。 */
         val FORBIDDEN_REQUEST_HEADERS = setOf(
             "x-requested-with",
             "host",

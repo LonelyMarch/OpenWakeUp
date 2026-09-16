@@ -107,6 +107,9 @@ dependencies {
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.lifecycle.runtime.ktx)
 
+    // WebView GET 代发使用 OkHttp 的双栈快速回退、HTTP/2 与连接池。
+    implementation(libs.okhttp)
+
     // Room 数据库。
     implementation(libs.androidx.room.runtime)
     ksp(libs.androidx.room.compiler)

@@ -19,6 +19,7 @@ lifecycle = "2.11.0"
 room = "2.8.5"
 # —— 解析、序列化与协程 ——
 jsoup = "1.23.2"
+okhttp = "5.4.0"
 kotlinxSerialization = "1.11.0"
 kotlinxCoroutines = "1.11.0"
 
@@ -41,6 +42,9 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 
 # HTML 解析
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
+
+# WebView GET 代发网络栈
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 
 # 序列化 / 协程
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }

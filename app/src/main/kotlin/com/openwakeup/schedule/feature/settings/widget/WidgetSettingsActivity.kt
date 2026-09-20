@@ -521,7 +521,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
             R.string.setting_widget_show_bg -> prefs.widgetShowBackground =
                 AppDefaults.Widget.SHOW_BACKGROUND
 
-            R.string.setting_widget_bg -> prefs.widgetBackground = prefs.widgetDefaultBackground
+            R.string.setting_widget_bg -> prefs.resetWidgetBackground()
             R.string.setting_empty_view -> prefs.resetWidgetEmptyView()
             R.string.setting_widget_show_header_area -> prefs.widgetShowHeader =
                 AppDefaults.Widget.SHOW_HEADER
@@ -531,7 +531,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
                 AppDefaults.Widget.SHOW_BUTTONS
 
             R.string.setting_widget_header_text_color ->
-                prefs.widgetHeaderColor = prefs.widgetDefaultHeaderColor
+                prefs.resetWidgetHeaderColor()
 
             R.string.setting_header_text_size -> prefs.widgetHeaderTextSize =
                 AppDefaults.Widget.HEADER_TEXT_SIZE
@@ -582,29 +582,22 @@ class WidgetSettingsActivity : AppCompatActivity() {
         }
     }
 
-    /** 选择默认、纯色或图片小部件背景，并用单选点回显当前背景类型。 */
+    /** 选择纯色或图片小部件背景，并用单选点回显当前背景类型。 */
     private fun showBackgroundDialog() {
         val labels = arrayOf(
-            getString(R.string.widget_background_default),
             getString(R.string.widget_background_color),
             getString(R.string.widget_background_image),
         )
-        val checkedItem = when {
-            prefs.widgetBackground == prefs.widgetDefaultBackground -> WIDGET_BACKGROUND_DEFAULT_INDEX
-            prefs.widgetBackground.startsWith("#") -> WIDGET_BACKGROUND_COLOR_INDEX
-            else -> WIDGET_BACKGROUND_IMAGE_INDEX
+        val checkedItem = if (prefs.isWidgetBackgroundImage) {
+            WIDGET_BACKGROUND_IMAGE_INDEX
+        } else {
+            WIDGET_BACKGROUND_COLOR_INDEX
         }
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.widget_choose_background)
             .setSingleChoiceItems(labels, checkedItem) { dialog, which ->
                 dialog.dismiss()
                 when (which) {
-                    WIDGET_BACKGROUND_DEFAULT_INDEX -> {
-                        // “默认”按当前主题选色后立即固化，后续切换应用主题不会改变已有小部件。
-                        prefs.widgetBackground = prefs.widgetDefaultBackground
-                        render()
-                    }
-
                     WIDGET_BACKGROUND_COLOR_INDEX -> showColorPicker(prefs.widgetBackground) {
                         prefs.widgetBackground = it
                     }
@@ -1118,14 +1111,11 @@ class WidgetSettingsActivity : AppCompatActivity() {
         runCatching { Color.parseColor(value) }.getOrDefault(fallback)
 
     companion object {
-        /** 小部件背景类型弹窗中“默认背景”所在位置。 */
-        private const val WIDGET_BACKGROUND_DEFAULT_INDEX = 0
-
         /** 小部件背景类型弹窗中“纯色背景”所在位置。 */
-        private const val WIDGET_BACKGROUND_COLOR_INDEX = 1
+        private const val WIDGET_BACKGROUND_COLOR_INDEX = 0
 
         /** 小部件背景类型弹窗中“图片背景”所在位置。 */
-        private const val WIDGET_BACKGROUND_IMAGE_INDEX = 2
+        private const val WIDGET_BACKGROUND_IMAGE_INDEX = 1
 
         /** 设置页样例课程的颜色，同时用于课程格子不透明度轨道。 */
         private const val WIDGET_PREVIEW_COURSE_COLOR = "#FF2979FF"

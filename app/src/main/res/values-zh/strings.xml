@@ -217,7 +217,6 @@
     <string name="widget_empty_text_required">请输入要显示的文字</string>
     <string name="widget_pin_desc">选择一周课程、今日课程、近日课程或日视图并添加到桌面</string>
     <string name="widget_choose_background">选择小部件背景</string>
-    <string name="widget_background_default">默认背景</string>
     <string name="widget_background_color">纯色背景</string>
     <string name="widget_background_image">图片背景</string>
     <string name="widget_color_default">默认颜色</string>

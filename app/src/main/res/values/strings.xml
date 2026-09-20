@@ -221,7 +221,6 @@ DO NOT modify the file extension.</string>
     <string name="widget_empty_text_required">Enter the text to display</string>
     <string name="widget_pin_desc">Pick the week, day, today or recent widget and add it to the home screen</string>
     <string name="widget_choose_background">Choose widget background</string>
-    <string name="widget_background_default">Default background</string>
     <string name="widget_background_color">Solid color</string>
     <string name="widget_background_image">Image</string>
     <string name="widget_color_default">Default color</string>

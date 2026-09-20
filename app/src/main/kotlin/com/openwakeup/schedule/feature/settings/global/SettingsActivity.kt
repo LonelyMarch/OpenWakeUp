@@ -252,6 +252,8 @@ class SettingsActivity : AppCompatActivity() {
             R.string.theme_mode_title -> {
                 prefs.themeMode = AppDefaults.Global.THEME_MODE
                 AppThemeController.apply(AppDefaults.Global.THEME_MODE)
+                // 主题变化后立即让桌面小部件重新读取对应主题的纯色背景与标题颜色。
+                WidgetRefreshScheduler.refreshAll(this)
             }
 
             R.string.setting_app_language ->
@@ -290,6 +292,8 @@ class SettingsActivity : AppCompatActivity() {
                 val selected = modes[which]
                 prefs.themeMode = selected
                 AppThemeController.apply(selected)
+                // Provider 收到广播时会按新主题读取对应颜色；图片背景的标题颜色保持固定值。
+                WidgetRefreshScheduler.refreshAll(this)
                 render()
                 dialog.dismiss()
             }

@@ -97,6 +97,12 @@ class AboutActivity : AppCompatActivity() {
                     usePrimaryTitleColor = true,
                 ),
                 VerticalItem(
+                    R.string.credit_course_adapter,
+                    getString(R.string.credit_course_adapter_desc),
+                    showChevron = true,
+                    usePrimaryTitleColor = true,
+                ),
+                VerticalItem(
                     R.string.credit_original_author,
                     getString(R.string.credit_original_author_desc),
                 ),
@@ -131,6 +137,7 @@ class AboutActivity : AppCompatActivity() {
             R.string.credit_wakeup_java -> WAKEUP_JAVA_URL
             R.string.credit_wakeup_bupt -> WAKEUP_BUPT_URL
             R.string.credit_course_table_ics_formatter -> COURSE_TABLE_ICS_FORMATTER_URL
+            R.string.credit_course_adapter -> COURSE_ADAPTER_URL
             R.string.open_source_license_name -> LICENSE_URL
             else -> return
         }
@@ -157,6 +164,9 @@ class AboutActivity : AppCompatActivity() {
         /** 为浏览器端 ICS 课表生成方案提供参考的开源项目。 */
         const val COURSE_TABLE_ICS_FORMATTER_URL =
             "https://github.com/wtlyu/Course-Table-ICS-Formatter"
+
+        /** CourseAdapter 原生 Parser 迁移参考仓库。 */
+        const val COURSE_ADAPTER_URL = "https://github.com/VenomBat/CourseAdapter"
 
         /** 当前项目仓库中的 GNU AGPL v3 许可证文件。 */
         const val LICENSE_URL = "$GITHUB_REPOSITORY_URL/blob/dev/LICENSE"

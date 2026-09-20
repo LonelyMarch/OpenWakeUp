@@ -1,154 +1,185 @@
-/*
- * 本文件基于 YZune/WakeupSchedule_Kotlin 的 Apache-2.0 正方教务解析实现修改。
- * 原始版权：Copyright 2019 YZune。
- * OpenWakeUp 于 2026 年统一了多版本页面解析与结果校验；完整来源见仓库 NOTICE.md。
- */
 package com.openwakeup.parser.web
 
 import com.openwakeup.parser.CoursePreview
 import com.openwakeup.parser.Parser
 import com.openwakeup.parser.ParserException
 import com.openwakeup.parser.ParserInput
+import com.openwakeup.parser.utils.ZfTimeParser
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
 
 /**
- * 正方家族解析器。
+ * `zf` 对应的旧版正方 HTML 网格解析器。
  *
- * 页面语义：
- * - 主表 `<table id="Table1">`；行内 "第N节" 单元格标记当前节次；
- * - 列计数（跳过表头与空格）即星期（第 1 数据列=周一）；
- * - 单元格 html 按 `<br><br>`（异常页 `<br><br><br>`）拆分多门课；
- * - 每门课剥 `<a>` 后按 `<br>` 拆行：[名称, (属性如"必修课"), 时间段{第a-b周(单周)}, 教师?, 教室?]；
- * - 时间段 "周X" 前缀可覆盖列推算的星期；{...} 内解析起止周与单双周。
+ * 只接受带 `Table1` 或 `kbgrid_table` 的锚点页面。课程单元格以两个及以上 `<br>` 分隔课程，
+ * 单个 `<br>` 分隔课程名称、属性、时间、教师和教室；不再回落到页面中的任意表格。
  */
 object ZfParser : Parser {
+
+    /**
+     * 解析旧版正方课表 HTML。
+     *
+     * @param input `text` 为完整课表页 HTML；`type` 已由静态工厂消费
+     * @return 非空课程预览列表
+     * @throws ParserException 页面指纹、课程字段或时间字段不符合契约
+     */
     override fun parse(input: ParserInput): List<CoursePreview> {
-        val doc = Jsoup.parse(input.text)
-        val table = doc.getElementById("Table1")
-            ?: doc.select("table#table1").firstOrNull()
-            ?: doc.select("table").firstOrNull()
-            ?: throw ParserException.parse("页面中没有课表表格（未找到 Table1）")
+        try {
+            val document = Jsoup.parse(input.text)
+            val table = document.getElementById("Table1")
+                ?: document.getElementById("kbgrid_table")
+                ?: throw ParserException.parse("页面中没有旧版正方课表表格（Table1/kbgrid_table）")
+            requireZfGridFingerprint(table)
 
-        data class Bean(
-            var cDay: Int, var startNode: Int, var name: String,
-            var timeInfo: String, var room: String, var teacher: String,
-        )
-
-        val beans = mutableListOf<Bean>()
-        var node = -1
-        for (tr in table.select("tr")) {
-            val tds = tr.select("td")
-            var countFlag = false
-            var countDay = 0
-            for (td in tds) {
-                val text = td.text().trim()
-                if (text.length <= 1) {
-                    if (countFlag) countDay++
-                    continue
-                }
-                if (text in OTHER_HEADER) continue
-                val headerNode = parseHeaderNode(text)
-                if (headerNode != -1) {
-                    node = headerNode
-                    countFlag = true
-                    continue
-                }
-                countDay++
-                // 单元格 html 拆多门课（按 <br><br> 拆分，异常页 <br><br><br>）
-                // jsoup html() 会在 <br> 后插入换行，先去除以保证 <br><br> 连续匹配
-                val html =
-                    td.html().replace("\n", "").replace("\r", "").substringBeforeLast("</td>")
-                val abnormal = html.contains("<br><br><br>")
-                val courses = html.split(if (abnormal) "<br><br><br>" else "<br><br>")
-                for (courseStr in courses) {
-                    val inner = if (courseStr.contains("\">")) {
-                        courseStr.substringAfter("\">").substringBeforeLast("</a>")
-                    } else {
-                        courseStr
+            val result = mutableListOf<CoursePreview>()
+            var nodeRowCount = 0
+            table.select("tr").forEach { row ->
+                var startNode = -1
+                var day = 0
+                val cells = row.children()
+                    .filter { child -> child.tagName().equals("td", ignoreCase = true) }
+                cells.forEach cellLoop@{ cell ->
+                    val text = cell.text().trim()
+                    parseHeaderNode(text)?.let { node ->
+                        startNode = node
+                        nodeRowCount++
+                        return@cellLoop
                     }
-                    val split = inner.split("<br>").map { it.trim() }.filter { it.isNotEmpty() }
-                    if (split.size < 3) continue
-                    val bean = when {
-                        split[1] in COURSE_PROPERTY && split.size >= 5 ->
-                            Bean(
-                                countDay,
-                                node,
-                                split[0],
-                                split[2],
-                                split.getOrElse(4) { "" },
-                                split[3]
+                    if (startNode < 1) return@cellLoop
+
+                    day++
+                    if (text.isBlank() || text in OTHER_HEADERS) return@cellLoop
+                    if (day !in 1..7) {
+                        throw ParserException.parse("旧版正方课表出现第 $day 个星期列")
+                    }
+                    val fallbackStep = cell.attr("rowspan").toIntOrNull()?.takeIf { it > 0 } ?: 1
+                    parseHtmlCell(cell).forEach { course ->
+                        val times = try {
+                            ZfTimeParser.parse(course.time, day, startNode, fallbackStep)
+                        } catch (error: IllegalArgumentException) {
+                            throw ParserException.parse(
+                                "课程“${course.name}”的时间字段无法解析",
+                                error
                             )
-
-                        split[1] in COURSE_PROPERTY && split.size == 4 ->
-                            Bean(countDay, node, split[0], split[2], split[3], "")
-
-                        !abnormal && split.size == 3 ->
-                            Bean(countDay, node, split[0], split[1], split[2], "")
-
-                        abnormal && split.size == 3 ->
-                            Bean(countDay, node, split[0], split[1], "", split[2])
-
-                        else ->
-                            // ≥4 元：[名称, 时间段, 教师, 教室]
-                            Bean(countDay, node, split[0], split[1], split[3], split[2])
+                        }
+                        times.forEach { time ->
+                            result += CoursePreview(
+                                name = course.name,
+                                teacher = course.teacher,
+                                room = course.room,
+                                day = time.day,
+                                startNode = time.startNode,
+                                step = time.step,
+                                startWeek = time.week.startWeek,
+                                endWeek = time.week.endWeek,
+                                type = time.week.type,
+                            )
+                        }
                     }
-                    beans.add(bean)
                 }
             }
-        }
-        if (beans.isEmpty()) throw ParserException.empty()
-
-        return beans.mapNotNull { b ->
-            // day：timeInfo "周X" 前缀优先，否则列位置
-            val day = if (b.timeInfo.startsWith("周") && b.timeInfo.length >= 2) {
-                chineseWeek(b.timeInfo.substring(0, 2))
-            } else {
-                b.cDay
-            }
-            if (day !in 1..7) return@mapNotNull null
-            val brace = Regex("""[{][^}]*[}]""").find(b.timeInfo)?.value.orEmpty()
-            val nums = Regex("""\d{1,2}""").findAll(brace).toList().map { it.value.toInt() }
-            // 保留教务网页给出的原始周次，超过应用 48 周上限的课程由统一导入策略入库、
-            // 提示并隐藏，避免旧版 60 周截断掩盖真实的非法数据。
-            val startWeek = nums.getOrElse(0) { 1 }
-            val endWeek = nums.getOrElse(1) { startWeek }
-            val type = when {
-                b.timeInfo.contains("单周") -> 1
-                b.timeInfo.contains("双周") -> 2
-                else -> 0
-            }
-            // 节次区间 {第a-b节} 可覆盖行标 node
-            val nodeRange = Regex("""第\s*(\d{1,2})\s*[-–]\s*(\d{1,2})\s*节""").find(brace)
-            val startNode = nodeRange?.groupValues?.get(1)?.toIntOrNull() ?: b.startNode
-            val step =
-                nodeRange?.let { (it.groupValues[2].toInt() - startNode + 1).coerceAtLeast(1) } ?: 1
-            CoursePreview(
-                name = b.name, teacher = b.teacher, room = b.room,
-                day = day, startNode = startNode, step = step,
-                startWeek = startWeek, endWeek = endWeek, type = type,
-            )
+            if (nodeRowCount == 0) throw ParserException.parse("旧版正方课表没有节次行")
+            if (result.isEmpty()) throw ParserException.empty("旧版正方课表中没有课程")
+            return result
+        } catch (error: ParserException) {
+            throw error
+        } catch (error: Exception) {
+            throw ParserException.parse("旧版正方课表解析失败", error)
         }
     }
 
-    private fun parseHeaderNode(text: String): Int =
-        if (text.startsWith("第") && text.endsWith("节")) {
-            text.substring(1, text.length - 1).trim().toIntOrNull() ?: -1
-        } else {
-            -1
-        }
+    /**
+     * 将一个 HTML 单元格拆成课程记录。
+     *
+     * @param cell 星期网格中的课程单元格
+     * @return 单元格内按原顺序排列的课程记录
+     * @throws ParserException 单元格存在课程文本但缺少名称或时间
+     */
+    private fun parseHtmlCell(cell: Element): List<LegacyZfCourse> {
+        val html = cell.html().replace("\r", "").replace("\n", "")
+        val abnormalSingleDetail = THREE_OR_MORE_BREAKS.containsMatchIn(html)
+        return html.split(COURSE_SEPARATOR)
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .map { block ->
+                val lines = block.split(SINGLE_BREAK)
+                    .map { fragment -> Jsoup.parseBodyFragment(fragment).text().trim() }
+                    .filter(String::isNotEmpty)
+                if (lines.isEmpty()) throw ParserException.parse("旧版正方课程单元格为空")
 
-    private fun chineseWeek(text: String): Int =
-        when (text) {
-            "周一" -> 1; "周二" -> 2; "周三" -> 3; "周四" -> 4
-            "周五" -> 5; "周六" -> 6; "周日" -> 7
-            else -> -1
-        }
+                val name = lines.first().trim()
+                var timeIndex = 1
+                if (lines.getOrNull(timeIndex)
+                        ?.let(COURSE_PROPERTIES::contains) == true
+                ) timeIndex++
+                val timeLines = lines.drop(timeIndex).takeWhile(::isTimeLine)
+                if (timeLines.isEmpty()) throw ParserException.parse("课程“$name”缺少时间字段")
+                val time = timeLines.joinToString(";")
+                val details = lines.drop(timeIndex + timeLines.size)
+                val teacher: String
+                val room: String
+                when {
+                    details.isEmpty() -> {
+                        teacher = ""
+                        room = ""
+                    }
 
-    private val OTHER_HEADER = setOf(
+                    details.size == 1 && abnormalSingleDetail -> {
+                        teacher = details.first()
+                        room = ""
+                    }
+
+                    details.size == 1 -> {
+                        teacher = ""
+                        room = details.first()
+                    }
+
+                    else -> {
+                        teacher = details.first()
+                        room = details.drop(1).joinToString(" ")
+                    }
+                }
+                if (name.isBlank()) throw ParserException.parse("正方课程名称为空")
+                LegacyZfCourse(name, time, teacher, room)
+            }
+    }
+
+    /** 验证表格至少包含星期标题，避免把登录页或普通数据表误判为课表。 */
+    private fun requireZfGridFingerprint(table: Element) {
+        val text = table.text()
+        if (!text.contains("星期一") || !text.contains("星期二") || !text.contains("节")) {
+            throw ParserException.parse("页面中的表格不符合旧版正方课表结构")
+        }
+    }
+
+    /** 判断一行是否同时具备周次和数字时间语义，避免把姓周的教师误当作时间段。 */
+    private fun isTimeLine(text: String): Boolean =
+        text.contains('周') && text.any(Char::isDigit) && (text.contains('{') || text.contains('节'))
+
+    /** 从行标题中读取正整数节次。 */
+    private fun parseHeaderNode(text: String): Int? = HEADER_NODE_PATTERN.matchEntire(text)
+        ?.groupValues
+        ?.get(1)
+        ?.toIntOrNull()
+        ?.takeIf { it > 0 }
+
+    private data class LegacyZfCourse(
+        val name: String,
+        val time: String,
+        val teacher: String,
+        val room: String,
+    )
+
+    private val HEADER_NODE_PATTERN = Regex("""第\s*(\d{1,2})\s*节""")
+    private val SINGLE_BREAK = Regex("""(?i)<br\s*/?>""")
+    private val COURSE_SEPARATOR = Regex("""(?i)(?:<br\s*/?>\s*){2,}""")
+    private val THREE_OR_MORE_BREAKS = Regex("""(?i)(?:<br\s*/?>\s*){3,}""")
+    private val OTHER_HEADERS = setOf(
         "时间", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日",
         "早晨", "上午", "下午", "晚上", "节次",
     )
-    private val COURSE_PROPERTY = setOf(
-        "任选", "限选", "实践选修", "必修课", "选修课", "公共必修", "专业必修", "专业选修",
+    private val COURSE_PROPERTIES = setOf(
+        "任选", "限选", "实践选修", "必修课", "选修课", "必修", "选修", "专基", "专选",
+        "公必", "公选", "义修", "选", "必", "主干", "公共必修", "专业必修", "专业选修",
     )
 }

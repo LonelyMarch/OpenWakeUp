@@ -79,9 +79,6 @@ object AppDefaults {
         /** 深色主题创建小部件时使用的半透明深暖灰背景。 */
         const val BACKGROUND_DARK = "#61211B1B"
 
-        /** 无主题上下文时使用浅色默认背景；运行时会按首次使用时的主题固化具体颜色。 */
-        const val BACKGROUND = BACKGROUND_LIGHT
-
         /** 空课时默认只展示可编辑文案，不再同时显示占位插图。 */
         val EMPTY_VIEW_MODE = WidgetEmptyViewMode.TEXT
         const val EMPTY_IMAGE = ""

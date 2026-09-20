@@ -14,6 +14,7 @@ import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -27,6 +28,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import androidx.webkit.CustomHeader
+import androidx.webkit.ServiceWorkerClientCompat
+import androidx.webkit.ServiceWorkerControllerCompat
 import androidx.webkit.UserAgentMetadata
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
@@ -38,6 +41,7 @@ import com.openwakeup.parser.ParserFactory
 import com.openwakeup.parser.ParserInput
 import com.openwakeup.schedule.R
 import com.openwakeup.schedule.core.config.AppDefaults
+import com.openwakeup.schedule.core.util.WebSessionClient
 import com.openwakeup.schedule.data.schedule.ScheduleRepository
 import com.openwakeup.schedule.databinding.ActivityWebLoginBinding
 import kotlinx.coroutines.Dispatchers
@@ -63,8 +67,30 @@ class WebLoginActivity : AppCompatActivity() {
     private val type: String by lazy { intent.getStringExtra(EXTRA_TYPE).orEmpty() }
     private val schoolName: String by lazy { intent.getStringExtra(EXTRA_NAME).orEmpty() }
     private val mobileUserAgent: String by lazy { WebSettings.getDefaultUserAgent(this) }
+
+    /** GET 代发发生在 WebView 工作线程，模式状态需要保证跨线程可见。 */
+    @Volatile
     private var isDesktopMode = true
+
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+
+    /** 为所有 HTTP/HTTPS GET 提供不含 X-Requested-With 的原生响应。 */
+    private lateinit var webSessionClient: WebSessionClient
+
+    /** App 内唯一的网页原始输入门面；不暴露 Parser 实现给 WebView 层。 */
+    private lateinit var webImportSource: WebImportSource
+
+    /** 当前页面安装的全局 Service Worker 控制器，销毁时用于解除请求拦截。 */
+    private var serviceWorkerController: ServiceWorkerControllerCompat? = null
+
+    /** 旧 WebView 无法拦截 Service Worker 时暂时保存其原网络阻断状态。 */
+    private var previousServiceWorkerBlockNetworkLoads: Boolean? = null
+
+    /** 保存 Service Worker 原 Cookie 拦截状态，页面销毁时恢复进程级配置。 */
+    private var previousServiceWorkerCookieIntercept: Boolean? = null
+
+    /** WebView 是否支持在拦截回调中提供精确 Cookie 请求上下文。 */
+    private var cookieInterceptEnabled = false
 
     /** 防止渲染进程异常回调和 Activity 销毁流程重复释放同一个 WebView。 */
     private var webViewDestroyed = false
@@ -94,17 +120,31 @@ class WebLoginActivity : AppCompatActivity() {
         title = getString(R.string.web_login_title, schoolName)
         binding.btnBack.setOnClickListener { finish() }
         configureWebView()
+        webSessionClient = WebSessionClient(
+            userAgentProvider = {
+                if (isDesktopMode) WINDOWS_DESKTOP_USER_AGENT else mobileUserAgent
+            },
+            additionalHeadersProvider = {
+                if (isDesktopMode) WIN11_CHROME_HEADERS else emptyMap()
+            },
+            forbiddenRequestedWithValue = packageName,
+            cookieInterceptEnabled = cookieInterceptEnabled,
+        )
+        webImportSource = WebImportSource(binding.webView, webSessionClient, type)
+        configureServiceWorkerInterception()
         binding.webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                // 每次顶层导航开启新的页面代次，不能复用上一次 print-data 响应。
+                webSessionClient.clearCapturedResponse()
+                webImportSource.onPageStarted(url)
                 binding.editUrl.setText(url)
                 binding.pageProgress.visibility = View.VISIBLE
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
-                // 注入 getPageHtml（递归 iframe）
-                view?.evaluateJavascript(GET_PAGE_HTML_JS, null)
                 // 页面登录成功后主动落盘 Cookie，下次进入内置浏览器可复用登录态。
                 CookieManager.getInstance().flush()
+                webImportSource.onPageFinished(url)
                 binding.pageProgress.visibility = View.GONE
             }
 
@@ -118,6 +158,22 @@ class WebLoginActivity : AppCompatActivity() {
                     startActivity(Intent(Intent.ACTION_VIEW, uri))
                     true
                 }.getOrDefault(false)
+            }
+
+            /**
+             * 接管全部普通 HTTP/HTTPS GET，由原生网络层返回非空响应，并移除 WebView 注入的
+             * `X-Requested-With` 应用包名值。
+             *
+             * 非 GET 保持原来的 WebView 网络行为；已识别为 GET 的请求即使原生访问失败，也由
+             * [WebSessionClient] 返回本地错误响应，不能返回 `null` 触发 WebView 兜底。
+             */
+            override fun shouldInterceptRequest(
+                view: WebView?,
+                request: WebResourceRequest?,
+            ): WebResourceResponse? {
+                val currentRequest = request ?: return null
+                if (!webSessionClient.shouldIntercept(currentRequest)) return null
+                return webSessionClient.intercept(currentRequest)
             }
 
             /**
@@ -217,7 +273,8 @@ class WebLoginActivity : AppCompatActivity() {
             mediaPlaybackRequiresUserGesture = false
             javaScriptCanOpenWindowsAutomatically = true
             setSupportMultipleWindows(false)
-            offscreenPreRaster = true
+            // 导入页始终可见，不需要离屏预栅格化；关闭它可降低复杂教务 SPA 的渲染进程峰值内存。
+            offscreenPreRaster = false
         }
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
@@ -226,8 +283,131 @@ class WebLoginActivity : AppCompatActivity() {
         binding.webView.isHorizontalScrollBarEnabled = true
         binding.webView.isVerticalScrollBarEnabled = true
         binding.webView.setInitialScale(0)
+        configureInterceptedRequestCookies()
         configurePersistentRequestHeaders()
         applyDeviceMode(reload = false)
+    }
+
+    /**
+     * 在 WebView 支持时，把浏览器已按 SameSite、第三方与分区规则筛选的 Cookie 放进拦截请求。
+     *
+     * 不支持该能力时，GET 工具会退回 [CookieManager.getCookie]；该兼容路径不会影响
+     * `X-Requested-With` 的删除保证，但复杂 Cookie 场景需要以真机验证结果为准。
+     *
+     * WebKit 1.17.0 已公开 `COOKIE_INTERCEPT`，但其 `WebViewSupportFeature` 的 StringDef
+     * 遗漏了该常量，因此这里只抑制 `WrongConstant`；运行时能力检查仍必须保留。
+     */
+    @SuppressLint("WrongConstant")
+    private fun configureInterceptedRequestCookies() {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.COOKIE_INTERCEPT)) return
+        cookieInterceptEnabled = runCatching {
+            WebSettingsCompat.setCookiesIncludedInShouldInterceptRequest(
+                binding.webView.settings,
+                true,
+            )
+            true
+        }.getOrDefault(false)
+    }
+
+    /**
+     * 让 Service Worker 发起的 HTTP/HTTPS GET 复用同一个原生代发工具。
+     *
+     * Service Worker 控制器是进程级对象。当前 WebView 不支持请求拦截时，为避免出现绕过路径，
+     * 临时阻断 Service Worker 网络访问，并在页面销毁时恢复进入页面前的状态。
+     */
+    private fun configureServiceWorkerInterception() {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_BASIC_USAGE)) return
+        val controller = ServiceWorkerControllerCompat.getInstance()
+        serviceWorkerController = controller
+
+        if (
+            !WebViewFeature.isFeatureSupported(
+                WebViewFeature.SERVICE_WORKER_SHOULD_INTERCEPT_REQUEST,
+            )
+        ) {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_BLOCK_NETWORK_LOADS)) {
+                val settings = controller.serviceWorkerWebSettings
+                previousServiceWorkerBlockNetworkLoads = settings.getBlockNetworkLoads()
+                settings.setBlockNetworkLoads(true)
+            }
+            return
+        }
+
+        if (cookieInterceptEnabled) {
+            runCatching {
+                configureServiceWorkerCookieIntercept(controller)
+            }
+        }
+        controller.setServiceWorkerClient(
+            object : ServiceWorkerClientCompat() {
+                /** Service Worker GET 同样失败关闭；非 GET 不在本次改造范围内。 */
+                override fun shouldInterceptRequest(
+                    request: WebResourceRequest,
+                ): WebResourceResponse? {
+                    if (!webSessionClient.shouldIntercept(request)) return null
+                    return webSessionClient.intercept(request)
+                }
+            },
+        )
+    }
+
+    /**
+     * 在特性受支持时启用 Service Worker 请求 Cookie，并保存进入页面前的设置。
+     *
+     * 主 WebView 已启用 Cookie Intercept 才会调用本函数；这里仍重新检查当前 Provider，避免
+     * WebView 在页面生命周期中更新后直接调用已不受支持的 API。WebKit 1.17.0 的 StringDef
+     * 遗漏了该正式常量，因此仅在这个最小兼容边界抑制 `WrongConstant`。
+     *
+     * @param controller 当前进程的 Service Worker 控制器
+     */
+    @SuppressLint("WrongConstant")
+    private fun configureServiceWorkerCookieIntercept(
+        controller: ServiceWorkerControllerCompat,
+    ) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.COOKIE_INTERCEPT)) return
+
+        val settings = controller.serviceWorkerWebSettings
+        previousServiceWorkerCookieIntercept =
+            settings.isIncludeCookiesOnShouldInterceptRequestEnabled()
+        settings.setIncludeCookiesOnShouldInterceptRequestEnabled(true)
+    }
+
+    /** 解除进程级 Service Worker 客户端，并恢复为进入页面前的网络阻断状态。 */
+    private fun clearServiceWorkerInterception() {
+        val controller = serviceWorkerController ?: return
+        controller.setServiceWorkerClient(null)
+        previousServiceWorkerBlockNetworkLoads?.let { previousValue ->
+            if (
+                WebViewFeature.isFeatureSupported(
+                    WebViewFeature.SERVICE_WORKER_BLOCK_NETWORK_LOADS,
+                )
+            ) {
+                controller.serviceWorkerWebSettings.setBlockNetworkLoads(previousValue)
+            }
+        }
+        previousServiceWorkerCookieIntercept?.let { previousValue ->
+            restoreServiceWorkerCookieIntercept(controller, previousValue)
+        }
+        previousServiceWorkerBlockNetworkLoads = null
+        previousServiceWorkerCookieIntercept = null
+        serviceWorkerController = null
+    }
+
+    /**
+     * 在特性仍受支持时恢复进入页面前的 Service Worker Cookie Intercept 设置。
+     *
+     * @param controller 当前进程的 Service Worker 控制器
+     * @param previousValue 进入教务导入页面前的 Cookie Intercept 开关值
+     */
+    @SuppressLint("WrongConstant")
+    private fun restoreServiceWorkerCookieIntercept(
+        controller: ServiceWorkerControllerCompat,
+        previousValue: Boolean,
+    ) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.COOKIE_INTERCEPT)) return
+
+        controller.serviceWorkerWebSettings
+            .setIncludeCookiesOnShouldInterceptRequestEnabled(previousValue)
     }
 
     /**
@@ -401,16 +581,20 @@ class WebLoginActivity : AppCompatActivity() {
      */
     private fun importCurrentPage(mode: WebImportMode) {
         setImportButtonsEnabled(false)
-        binding.webView.evaluateJavascript(GET_PAGE_HTML_JS) { result ->
-            // evaluateJavascript 返回 JSON 字符串字面量（< > 等被转义为 \uXXXX），需先 JSON 解码
-            val html = runCatching {
-                org.json.JSONTokener(result).nextValue().toString()
-            }.getOrDefault(result ?: "")
-            lifecycleScope.launch {
-                runCatching {
-                    val previews = withContext(Dispatchers.Default) {
-                        ParserFactory.create(type).parse(ParserInput(html, type))
-                    }
+        lifecycleScope.launch {
+            var importSucceeded = false
+            runCatching {
+                // WebImportSource 只取得原始文本；这里是 App/Parser 唯一转换边界。
+                val payload = webImportSource.acquire(type)
+                val previews = withContext(Dispatchers.Default) {
+                    ParserFactory.parse(
+                        ParserInput(
+                            text = payload.primaryText,
+                            type = type,
+                            additionalTexts = payload.additionalTexts,
+                        ),
+                    )
+                }
                     check(previews.isNotEmpty()) { getString(R.string.web_import_no_courses) }
                     val currentTable = repo.currentTableId()
                         .takeIf { tableId -> tableId > 0 }
@@ -438,35 +622,28 @@ class WebLoginActivity : AppCompatActivity() {
                     CourseImportPolicy.writeCourses(repo, tableId, previews)
                     setResult(RESULT_OK)
                     CourseImportResult(previews.size, rangeReport)
-                }.onSuccess { result ->
-                    Snackbar.make(
-                        binding.root,
-                        resources.getQuantityString(
-                            R.plurals.import_ok_courses,
-                            result.importedSessionCount,
-                            result.importedSessionCount,
-                        ),
-                        Snackbar.LENGTH_LONG,
-                    )
-                        .setAnchorView(binding.btnImportPage)
-                        .show()
-                    CourseImportPolicy.showInvalidCourseDialog(
-                        this@WebLoginActivity,
-                        result.rangeReport
-                    )
-                }.onFailure { e ->
-                    val message = getString(
-                        R.string.import_fail,
-                        (e as? ParserException)?.message
-                            ?: e.message
-                            ?: getString(R.string.err_import_failed),
-                    )
-                    Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG)
-                        .setAnchorView(binding.btnImportPage)
-                        .show()
-                }
-                setImportButtonsEnabled(true)
+            }.onSuccess { result ->
+                importSucceeded = true
+                ImportSuccessFeedback.showThenReturnToSchedule(
+                    activity = this@WebLoginActivity,
+                    root = binding.root,
+                    anchor = binding.btnImportPage,
+                    result = result,
+                    onNavigationSkipped = { setImportButtonsEnabled(true) },
+                )
+            }.onFailure { e ->
+                val message = getString(
+                    R.string.import_fail,
+                    (e as? ParserException)?.message
+                        ?: e.message
+                        ?: getString(R.string.err_import_failed),
+                )
+                Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG)
+                    .setAnchorView(binding.btnImportPage)
+                    .show()
             }
+            // 成功后保持按钮禁用直到返回主课表，防止淡入、停留和淡出期间再次提交同一页。
+            if (!importSucceeded) setImportButtonsEnabled(true)
         }
     }
 
@@ -474,6 +651,8 @@ class WebLoginActivity : AppCompatActivity() {
     private fun setImportButtonsEnabled(enabled: Boolean) {
         binding.btnImportPage.isEnabled = enabled
         binding.btnDeviceMode.isEnabled = enabled
+        binding.btnGo.isEnabled = enabled
+        binding.editUrl.isEnabled = enabled
     }
 
     /** 网页课表写入目标。 */
@@ -510,6 +689,9 @@ class WebLoginActivity : AppCompatActivity() {
     private fun disposeWebView(webView: WebView) {
         if (webViewDestroyed) return
         webViewDestroyed = true
+        clearServiceWorkerInterception()
+        if (::webImportSource.isInitialized) webImportSource.close()
+        if (::webSessionClient.isInitialized) webSessionClient.close()
         webView.stopLoading()
         webView.webChromeClient = null
         (webView.parent as? ViewGroup)?.removeView(webView)
@@ -549,10 +731,5 @@ class WebLoginActivity : AppCompatActivity() {
                     "AppleWebKit/537.36 (KHTML, like Gecko) " +
                     "Chrome/$CHROME_MAJOR_VERSION.0.0.0 Safari/537.36"
 
-        /** getPageHtml：递归收集 iframe 内嵌文档 */
-        const val GET_PAGE_HTML_JS =
-            "(function(){function f(d){var s='';if(d){try{s=d.documentElement.outerHTML;}catch(e){}" +
-                    "var fr=d.querySelectorAll('iframe');for(var i=0;i<fr.length;i++){try{s+='\\n'+f(fr[i].contentDocument);}catch(e){}}}" +
-                    "return s;}return f(window.document);})()"
     }
 }

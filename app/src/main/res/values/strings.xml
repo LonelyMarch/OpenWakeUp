@@ -221,7 +221,6 @@ DO NOT modify the file extension.</string>
     <string name="widget_empty_text_required">Enter the text to display</string>
     <string name="widget_pin_desc">Pick the week, day, today or recent widget and add it to the home screen</string>
     <string name="widget_choose_background">Choose widget background</string>
-    <string name="widget_background_default">Default background</string>
     <string name="widget_background_color">Solid color</string>
     <string name="widget_background_image">Image</string>
     <string name="widget_color_default">Default color</string>
@@ -406,6 +405,8 @@ Tap here to learn how to choose the right EAS.</string>
     <string name="credit_wakeup_bupt_desc">EAS adaptation and parsing experience for BUPT</string>
     <string name="credit_course_table_ics_formatter">wtlyu/Course-Table-ICS-Formatter</string>
     <string name="credit_course_table_ics_formatter_desc">Reference for browser-based ICS timetable generation and export</string>
+    <string name="credit_course_adapter">VenomBat/CourseAdapter</string>
+    <string name="credit_course_adapter_desc">Reference implementation for native course-parser semantics and compatibility branches</string>
     <string name="credit_original_author">Original author of WakeUp Schedule</string>
     <string name="credit_original_author_desc">suda-yzune</string>
     <string name="credit_community">Developers and users</string>
@@ -425,7 +426,6 @@ Alpha is also adjustable (●ﾟωﾟ●)</string>
     <string name="desc_stroke_color">Set opacity to the lowest to hide the stroke</string>
     <string name="desc_schedule_config_default">Once applied, new schedules will reuse this schedule’s config except class time, name and start date — including appearance, lessons per day and more. Later changes to this schedule will not sync to those schedules</string>
     <string name="click_here_to_change">Tap to change</string>
-    <string name="term_date_pick_hint">If the semester starts on Wednesday, pick Wednesday’s date. And so on</string>
     <string name="title_course_manage">Courses</string>
     <string name="menu_clear">Clear</string>
     <string name="course_manage_hint">Tap to edit, long-press to delete</string>

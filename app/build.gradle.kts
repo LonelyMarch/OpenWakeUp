@@ -22,8 +22,8 @@ android {
         minSdk = 33
         targetSdk = 36
         // Android 要求 versionCode 为正整数
-        versionCode = 1
-        versionName = "0.0.1"
+        versionCode = 2
+        versionName = "0.0.2"
     }
 
     androidResources {
@@ -106,6 +106,9 @@ dependencies {
     implementation(libs.androidx.recyclerview)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+
+    // WebView GET 代发使用 OkHttp 的双栈快速回退、HTTP/2 与连接池。
+    implementation(libs.okhttp)
 
     // Room 数据库。
     implementation(libs.androidx.room.runtime)

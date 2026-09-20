@@ -406,6 +406,8 @@ Tap here to learn how to choose the right EAS.</string>
     <string name="credit_wakeup_bupt_desc">EAS adaptation and parsing experience for BUPT</string>
     <string name="credit_course_table_ics_formatter">wtlyu/Course-Table-ICS-Formatter</string>
     <string name="credit_course_table_ics_formatter_desc">Reference for browser-based ICS timetable generation and export</string>
+    <string name="credit_course_adapter">VenomBat/CourseAdapter</string>
+    <string name="credit_course_adapter_desc">Reference implementation for native course-parser semantics and compatibility branches</string>
     <string name="credit_original_author">Original author of WakeUp Schedule</string>
     <string name="credit_original_author_desc">suda-yzune</string>
     <string name="credit_community">Developers and users</string>

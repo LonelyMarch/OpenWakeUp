@@ -21,4 +21,8 @@ java {
 
 dependencies {
     implementation(libs.jsoup)
+    // 新 URP 的课表响应是结构化 JSON；仅使用 JSON DOM，不引入反射或 Android 依赖。
+    implementation(libs.kotlinx.serialization.json)
+    // Parser 是纯 JVM 模块，使用 Kotlin Test 固化各学校原始输入到 CoursePreview 的转换契约。
+    testImplementation(kotlin("test"))
 }

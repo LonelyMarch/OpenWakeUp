@@ -15,6 +15,17 @@ OpenWakeUp 项目代码及项目原创内容：Copyright (C) 2026 LonelyMarch an
 - 使用范围：课程表领域模型、部分 Android 交互组件及 CSV、URP、正方教务解析实现的早期代码基础；OpenWakeUp
   已进行包结构、数据契约、功能和界面修改。直接派生的 Kotlin 文件带有显著修改声明。
 
+## CourseAdapter
+
+- 原项目：[VenomBat/CourseAdapter](https://github.com/VenomBat/CourseAdapter)。
+- 许可证：MIT License。
+- 版权所有：以原仓库及其源码版权声明为准。
+- 使用范围：学校教务 Parser 的解析语义、输入结构及兼容分支参考。OpenWakeUp 将相关实现重写为
+  无网络副作用的 Kotlin 文本解析器，并按当前 `ParserInput`/`CoursePreview` 契约增加严格校验。
+
+CourseAdapter 的 MIT 许可证全文见
+[`third_party/licenses/CourseAdapter-MIT.txt`](third_party/licenses/CourseAdapter-MIT.txt)。
+
 ## NumberPickerView
 
 - 项目：<https://github.com/Carbs0126/NumberPickerView>

@@ -5,7 +5,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import androidx.core.content.getSystemService
 import com.google.android.material.color.DynamicColors
-import com.openwakeup.parser.Parsers
 import com.openwakeup.schedule.R
 import com.openwakeup.schedule.core.data.Prefs
 import com.openwakeup.schedule.core.designsystem.theme.AppThemeController
@@ -16,7 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
 /**
- * Application 入口：初始化应用主题、解析器、通知渠道和全局协程域。
+ * Application 入口：初始化应用主题、通知渠道和全局协程域。
  *
  * @property appScope 应用级协程域（SupervisorJob，单个子任务失败不传染）；由各仓库层使用
  */
@@ -38,9 +37,6 @@ class OpenWakeUpApp : Application() {
             // Android 12+ 使用系统壁纸动态色；不支持的设备由 Material 自动忽略。
             DynamicColors.applyToActivitiesIfAvailable(this)
         }
-        // 解析器工厂全量注册
-        Parsers.registerAll()
-
         // 全局协程域
         appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 

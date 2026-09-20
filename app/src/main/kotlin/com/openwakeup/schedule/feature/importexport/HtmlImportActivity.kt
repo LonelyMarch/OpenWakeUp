@@ -279,8 +279,7 @@ class HtmlImportActivity : AppCompatActivity() {
                 }
                 val html = bytes.toString(Charset.forName(selectedEncoding.charsetName))
                 val previews = withContext(Dispatchers.Default) {
-                    ParserFactory.create(selectedParserType)
-                        .parse(ParserInput(html, selectedParserType))
+                    ParserFactory.parse(ParserInput(html, selectedParserType))
                 }
                 check(previews.isNotEmpty()) { getString(R.string.web_import_no_courses) }
                 val currentTable = repo.currentTableId()

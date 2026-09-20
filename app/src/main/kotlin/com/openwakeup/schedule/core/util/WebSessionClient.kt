@@ -14,6 +14,8 @@ import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.Closeable
@@ -47,12 +49,129 @@ import java.util.concurrent.atomic.AtomicBoolean
  * @param cookieInterceptEnabled 是否已启用 AndroidX WebKit Cookie Intercept；启用后可以通过
  * [WebResourceResponseCompat] 将未经过重定向的响应 Cookie 精确交回 WebView
  */
-class WebGetRequestInterceptor(
+class WebSessionClient(
     private val userAgentProvider: () -> String,
     private val additionalHeadersProvider: () -> Map<String, String> = { emptyMap() },
     private val forbiddenRequestedWithValue: String,
     private val cookieInterceptEnabled: Boolean = false,
 ) : Closeable {
+
+    /**
+     * 会话请求返回的完整原文。
+     *
+     * 此类型只存在于 App 网络边界，不携带课程语义；正文大小由请求门面统一限制。
+     */
+    data class TextResponse(
+        val code: Int,
+        val url: String,
+        val body: String,
+    )
+
+    /** 供输入层消费的单个被捕获响应；仍然只包含原始文本和网络身份。 */
+    data class CapturedResponse(
+        val code: Int,
+        val url: String,
+        val body: String,
+    )
+
+    /**
+     * 安装或清除有界响应捕获规则。
+     *
+     * 客户端只执行调用方提供的 URL 判定，不识别 type、课程字段或 JSON 结构。安装新规则时会
+     * 清空旧响应，避免跨页面代次复用过期课表。
+     */
+    fun configureResponseCapture(predicate: ((String) -> Boolean)?) {
+        responseCapturePredicate = predicate
+        synchronized(captureLock) { capturedResponse = null }
+    }
+
+    /** 清除当前页面代次留下的响应捕获结果。 */
+    fun clearCapturedResponse() {
+        synchronized(captureLock) { capturedResponse = null }
+    }
+
+    /** 返回当前规则命中的最新响应快照。 */
+    fun latestCapturedResponse(): CapturedResponse? =
+        synchronized(captureLock) { capturedResponse }
+
+    /** 在当前 WebView Cookie 会话中执行受限 GET 并读取文本正文。 */
+    fun getText(url: String, headers: Map<String, String> = emptyMap()): TextResponse =
+        executeText(buildTextRequest(url, "GET", null, headers))
+
+    /** 在当前 WebView Cookie 会话中执行表单 POST。 */
+    fun postFormText(
+        url: String,
+        fields: Map<String, String>,
+        headers: Map<String, String> = emptyMap(),
+    ): TextResponse {
+        val body = okhttp3.FormBody.Builder().apply {
+            fields.forEach { (name, value) -> add(name, value) }
+        }.build()
+        return executeText(buildTextRequest(url, "POST", body, headers))
+    }
+
+    /** 在当前 WebView Cookie 会话中执行 JSON POST。 */
+    fun postJsonText(
+        url: String,
+        json: String,
+        headers: Map<String, String> = emptyMap(),
+    ): TextResponse {
+        val body = json.toRequestBody(JSON_MEDIA_TYPE)
+        return executeText(buildTextRequest(url, "POST", body, headers))
+    }
+
+    /** 在当前 WebView Cookie 会话中执行 multipart 表单 POST。 */
+    fun postMultipartText(
+        url: String,
+        fields: Map<String, String>,
+        headers: Map<String, String> = emptyMap(),
+    ): TextResponse {
+        val body = okhttp3.MultipartBody.Builder()
+            .setType(okhttp3.MultipartBody.FORM)
+            .apply { fields.forEach { (name, value) -> addFormDataPart(name, value) } }
+            .build()
+        return executeText(buildTextRequest(url, "POST", body, headers))
+    }
+
+    /** 构造不允许自动重定向的会话文本请求。 */
+    private fun buildTextRequest(
+        url: String,
+        method: String,
+        body: okhttp3.RequestBody?,
+        headers: Map<String, String>,
+    ): Request {
+        require(URL(url).protocol.lowercase(Locale.ROOT) in HTTP_SCHEMES) { "仅支持 HTTP(S) 请求" }
+        val builder = Request.Builder().url(url).method(method, body)
+        builder.header(USER_AGENT_HEADER, userAgentProvider())
+        val cookie = mergedCookieHeader(url, cookieManager.getCookie(url))
+        if (!cookie.isNullOrBlank()) builder.header(COOKIE_HEADER, cookie)
+        headers.forEach { (name, value) ->
+            require(name.lowercase(Locale.ROOT) in TEXT_REQUEST_HEADERS) { "请求头不在允许列表中" }
+            require('\r' !in value && '\n' !in value) { "请求头包含非法换行" }
+            builder.header(name, value)
+        }
+        return builder.build()
+    }
+
+    /** 执行文本请求并将响应正文限制在固定上限内。 */
+    private fun executeText(request: Request): TextResponse {
+        check(!closed.get()) { "会话已经关闭" }
+        val call = sharedClient.newCall(request)
+        activeCalls += call
+        return try {
+            call.execute().use { response ->
+                storeCookies(
+                    response.request.url.toString(),
+                    response.headers.values(SET_COOKIE_HEADER),
+                )
+                val bytes = response.body.bytes()
+                require(bytes.size <= MAX_TEXT_RESPONSE_BYTES) { "响应正文超过大小限制" }
+                TextResponse(response.code, response.request.url.toString(), bytes.toString(Charsets.UTF_8))
+            }
+        } finally {
+            activeCalls -= call
+        }
+    }
 
     /** WebView 与原生代发请求共用的 Cookie 存储，避免创建第二套登录态。 */
     private val cookieManager = CookieManager.getInstance()
@@ -68,6 +187,12 @@ class WebGetRequestInterceptor(
     /** 正在执行或仍由 WebView 读取响应体的调用；Activity 销毁时统一取消。 */
     private val activeCalls = ConcurrentHashMap.newKeySet<Call>()
 
+    /** 响应捕获规则和结果的短期内存状态，不写入日志、文件或数据库。 */
+    @Volatile
+    private var responseCapturePredicate: ((String) -> Boolean)? = null
+    private val captureLock = Any()
+    private var capturedResponse: CapturedResponse? = null
+
     /** 关闭后所有新请求均返回本地错误页，不允许重新落入 WebView 网络栈。 */
     private val closed = AtomicBoolean(false)
 
@@ -75,7 +200,7 @@ class WebGetRequestInterceptor(
      * 判断请求是否属于本工具必须接管的范围。
      *
      * @param request WebView 或 Service Worker 提供的请求
-     * @return 仅普通 HTTP/HTTPS GET 返回 `true`
+     * @return 普通 HTTP/HTTPS GET 返回 `true`
      */
     fun shouldIntercept(request: WebResourceRequest): Boolean {
         if (!request.method.equals(GET_METHOD, ignoreCase = true)) return false
@@ -198,8 +323,11 @@ class WebGetRequestInterceptor(
                     continue
                 }
 
-                // WebResourceResponse 明确不支持 3xx；未识别的 3xx 必须失败关闭，不能交给 WebView 跟随。
-                check(statusCode !in 300..399) { "Unsupported redirect status" }
+                // WebResourceResponse 明确不支持普通 3xx；304 没有可复用缓存正文，交给
+                // createNetworkResponse 归一化为无正文的 200，其余状态必须失败关闭。
+                check(statusCode !in 300..399 || statusCode == HTTP_NOT_MODIFIED) {
+                    "Unsupported redirect status"
+                }
                 return createNetworkResponse(
                     response = networkResponse,
                     call = call,
@@ -336,16 +464,48 @@ class WebGetRequestInterceptor(
         redirectCount: Int,
     ): WebResourceResponse {
         val statusCode = response.code
-        check(statusCode in 100..599 && statusCode !in 300..399) { "Invalid response status" }
+        check(
+            statusCode in 100..599 &&
+                (statusCode !in 300..399 || statusCode == HTTP_NOT_MODIFIED),
+        ) { "Invalid response status" }
+        // WebResourceResponse 无法根据 304 恢复 WebView 缓存正文；将无正文的缓存命中
+        // 归一化为 200，避免 Chromium 收到不完整的 304 响应后终止渲染进程。
+        val webStatusCode = if (statusCode == HTTP_NOT_MODIFIED) HTTP_OK else statusCode
         val contentType = parseContentType(
             response.body.contentType()?.toString() ?: response.header(CONTENT_TYPE_HEADER),
             requestUrl,
         )
         val webHeaders = flattenResponseHeaders(response.headers)
+        val capturePredicate = responseCapturePredicate
+        val capturedBody = if (
+            capturePredicate?.invoke(requestUrl) == true &&
+            statusCode in 200..299 &&
+            statusCode != HTTP_NO_CONTENT &&
+            statusCode != HTTP_NOT_MODIFIED
+        ) {
+            response.body.bytes().also { bytes ->
+                require(bytes.size <= MAX_CAPTURE_RESPONSE_BYTES) { "被捕获响应超过大小限制" }
+            }
+        } else {
+            null
+        }
+        if (capturedBody != null) {
+            synchronized(captureLock) {
+                capturedResponse = CapturedResponse(
+                    code = statusCode,
+                    url = requestUrl,
+                    body = capturedBody.toString(Charsets.UTF_8),
+                )
+            }
+            // 正文已完整复制到内存，立即释放 OkHttp 响应；WebView 使用独立字节流继续渲染。
+            closeResponse(response, call)
+        }
         val responseStream = if (statusCode == HTTP_NO_CONTENT || statusCode == HTTP_NOT_MODIFIED) {
             // 这两类响应按协议没有正文，立即释放底层 Response，无需等待 WebView 关闭空流。
-            closeResponse(response, call)
+            if (capturedBody == null) closeResponse(response, call)
             ByteArrayInputStream(ByteArray(0))
+        } else if (capturedBody != null) {
+            ByteArrayInputStream(capturedBody)
         } else {
             ResponseClosingInputStream(response.body.byteStream()) {
                 closeResponse(response, call)
@@ -355,8 +515,8 @@ class WebGetRequestInterceptor(
         val compatResponse = WebResourceResponseCompat(
             contentType.mimeType,
             contentType.charset,
-            statusCode,
-            safeReasonPhrase(statusCode, response.message),
+            webStatusCode,
+            safeReasonPhrase(webStatusCode, response.message),
             webHeaders,
             responseStream,
         )
@@ -727,6 +887,27 @@ class WebGetRequestInterceptor(
         const val HTTP_NOT_MODIFIED = 304
         const val HTTP_BAD_GATEWAY = 502
 
+        /** 文本请求允许转发的最小请求头集合。 */
+        val TEXT_REQUEST_HEADERS = setOf(
+            ACCEPT_HEADER.lowercase(Locale.ROOT),
+            // 仅供明确的 WebVPN 输入提供器转发当前 WebView Cookie；普通请求仍由本类按目标 URL
+            // 自动读取 CookieManager，调用方不得把任意凭据写入其他请求头。
+            COOKIE_HEADER.lowercase(Locale.ROOT),
+            REFERER_HEADER.lowercase(Locale.ROOT),
+            AUTHORIZATION_HEADER.lowercase(Locale.ROOT),
+            "access-token",
+            "content-type",
+        )
+
+        /** 防止异常页面无限占用内存的单响应上限。 */
+        const val MAX_TEXT_RESPONSE_BYTES = 8 * 1024 * 1024
+
+        /** A 批次接口响应的单响应捕获上限。 */
+        const val MAX_CAPTURE_RESPONSE_BYTES = 8 * 1024 * 1024
+
+        /** JSON 请求体的固定媒体类型。 */
+        val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+
         /** 能够建立独立 Document 上下文的 Fetch 目标。 */
         val DOCUMENT_FETCH_DESTINATIONS = setOf("document", "iframe", "frame")
 
@@ -765,9 +946,11 @@ class WebGetRequestInterceptor(
         val FORBIDDEN_RESPONSE_HEADERS = setOf(
             "set-cookie",
             "set-cookie2",
-            // MIME 与编码已通过 WebResourceResponse 的专用参数传递，不能把服务器重复字段
+            // MIME 已通过 WebResourceResponse 的专用参数传递，不能把服务器重复字段
             // 合并成 `text/javascript, text/javascript` 之类的非法单值。
             "content-type",
+            "content-length",
+            "content-range",
             "connection",
             "proxy-connection",
             "keep-alive",

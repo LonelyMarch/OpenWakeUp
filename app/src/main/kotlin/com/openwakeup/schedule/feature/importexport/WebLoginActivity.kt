@@ -41,7 +41,7 @@ import com.openwakeup.parser.ParserFactory
 import com.openwakeup.parser.ParserInput
 import com.openwakeup.schedule.R
 import com.openwakeup.schedule.core.config.AppDefaults
-import com.openwakeup.schedule.core.util.WebGetRequestInterceptor
+import com.openwakeup.schedule.core.util.WebSessionClient
 import com.openwakeup.schedule.data.schedule.ScheduleRepository
 import com.openwakeup.schedule.databinding.ActivityWebLoginBinding
 import kotlinx.coroutines.Dispatchers
@@ -75,7 +75,10 @@ class WebLoginActivity : AppCompatActivity() {
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
 
     /** 为所有 HTTP/HTTPS GET 提供不含 X-Requested-With 的原生响应。 */
-    private lateinit var getRequestInterceptor: WebGetRequestInterceptor
+    private lateinit var webSessionClient: WebSessionClient
+
+    /** App 内唯一的网页原始输入门面；不暴露 Parser 实现给 WebView 层。 */
+    private lateinit var webImportSource: WebImportSource
 
     /** 当前页面安装的全局 Service Worker 控制器，销毁时用于解除请求拦截。 */
     private var serviceWorkerController: ServiceWorkerControllerCompat? = null
@@ -117,7 +120,7 @@ class WebLoginActivity : AppCompatActivity() {
         title = getString(R.string.web_login_title, schoolName)
         binding.btnBack.setOnClickListener { finish() }
         configureWebView()
-        getRequestInterceptor = WebGetRequestInterceptor(
+        webSessionClient = WebSessionClient(
             userAgentProvider = {
                 if (isDesktopMode) WINDOWS_DESKTOP_USER_AGENT else mobileUserAgent
             },
@@ -127,18 +130,21 @@ class WebLoginActivity : AppCompatActivity() {
             forbiddenRequestedWithValue = packageName,
             cookieInterceptEnabled = cookieInterceptEnabled,
         )
+        webImportSource = WebImportSource(binding.webView, webSessionClient, type)
         configureServiceWorkerInterception()
         binding.webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                // 每次顶层导航开启新的页面代次，不能复用上一次 print-data 响应。
+                webSessionClient.clearCapturedResponse()
+                webImportSource.onPageStarted(url)
                 binding.editUrl.setText(url)
                 binding.pageProgress.visibility = View.VISIBLE
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
-                // 注入 getPageHtml（递归 iframe）
-                view?.evaluateJavascript(GET_PAGE_HTML_JS, null)
                 // 页面登录成功后主动落盘 Cookie，下次进入内置浏览器可复用登录态。
                 CookieManager.getInstance().flush()
+                webImportSource.onPageFinished(url)
                 binding.pageProgress.visibility = View.GONE
             }
 
@@ -155,18 +161,19 @@ class WebLoginActivity : AppCompatActivity() {
             }
 
             /**
-             * 接管全部普通 HTTP/HTTPS GET，由原生网络层返回非空响应。
+             * 接管全部普通 HTTP/HTTPS GET，由原生网络层返回非空响应，并移除 WebView 注入的
+             * `X-Requested-With` 应用包名值。
              *
              * 非 GET 保持原来的 WebView 网络行为；已识别为 GET 的请求即使原生访问失败，也由
-             * [WebGetRequestInterceptor] 返回本地错误响应，不能返回 `null` 触发 WebView 兜底。
+             * [WebSessionClient] 返回本地错误响应，不能返回 `null` 触发 WebView 兜底。
              */
             override fun shouldInterceptRequest(
                 view: WebView?,
                 request: WebResourceRequest?,
             ): WebResourceResponse? {
                 val currentRequest = request ?: return null
-                if (!getRequestInterceptor.shouldIntercept(currentRequest)) return null
-                return getRequestInterceptor.intercept(currentRequest)
+                if (!webSessionClient.shouldIntercept(currentRequest)) return null
+                return webSessionClient.intercept(currentRequest)
             }
 
             /**
@@ -266,7 +273,8 @@ class WebLoginActivity : AppCompatActivity() {
             mediaPlaybackRequiresUserGesture = false
             javaScriptCanOpenWindowsAutomatically = true
             setSupportMultipleWindows(false)
-            offscreenPreRaster = true
+            // 导入页始终可见，不需要离屏预栅格化；关闭它可降低复杂教务 SPA 的渲染进程峰值内存。
+            offscreenPreRaster = false
         }
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
@@ -336,8 +344,8 @@ class WebLoginActivity : AppCompatActivity() {
                 override fun shouldInterceptRequest(
                     request: WebResourceRequest,
                 ): WebResourceResponse? {
-                    if (!getRequestInterceptor.shouldIntercept(request)) return null
-                    return getRequestInterceptor.intercept(request)
+                    if (!webSessionClient.shouldIntercept(request)) return null
+                    return webSessionClient.intercept(request)
                 }
             },
         )
@@ -573,16 +581,19 @@ class WebLoginActivity : AppCompatActivity() {
      */
     private fun importCurrentPage(mode: WebImportMode) {
         setImportButtonsEnabled(false)
-        binding.webView.evaluateJavascript(GET_PAGE_HTML_JS) { result ->
-            // evaluateJavascript 返回 JSON 字符串字面量（< > 等被转义为 \uXXXX），需先 JSON 解码
-            val html = runCatching {
-                org.json.JSONTokener(result).nextValue().toString()
-            }.getOrDefault(result ?: "")
-            lifecycleScope.launch {
-                runCatching {
-                    val previews = withContext(Dispatchers.Default) {
-                        ParserFactory.create(type).parse(ParserInput(html, type))
-                    }
+        lifecycleScope.launch {
+            runCatching {
+                // WebImportSource 只取得原始文本；这里是 App/Parser 唯一转换边界。
+                val payload = webImportSource.acquire(type)
+                val previews = withContext(Dispatchers.Default) {
+                    ParserFactory.parse(
+                        ParserInput(
+                            text = payload.primaryText,
+                            type = type,
+                            additionalTexts = payload.additionalTexts,
+                        ),
+                    )
+                }
                     check(previews.isNotEmpty()) { getString(R.string.web_import_no_courses) }
                     val currentTable = repo.currentTableId()
                         .takeIf { tableId -> tableId > 0 }
@@ -610,35 +621,34 @@ class WebLoginActivity : AppCompatActivity() {
                     CourseImportPolicy.writeCourses(repo, tableId, previews)
                     setResult(RESULT_OK)
                     CourseImportResult(previews.size, rangeReport)
-                }.onSuccess { result ->
-                    Snackbar.make(
-                        binding.root,
-                        resources.getQuantityString(
-                            R.plurals.import_ok_courses,
-                            result.importedSessionCount,
-                            result.importedSessionCount,
-                        ),
-                        Snackbar.LENGTH_LONG,
-                    )
-                        .setAnchorView(binding.btnImportPage)
-                        .show()
-                    CourseImportPolicy.showInvalidCourseDialog(
-                        this@WebLoginActivity,
-                        result.rangeReport
-                    )
-                }.onFailure { e ->
-                    val message = getString(
-                        R.string.import_fail,
-                        (e as? ParserException)?.message
-                            ?: e.message
-                            ?: getString(R.string.err_import_failed),
-                    )
-                    Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG)
-                        .setAnchorView(binding.btnImportPage)
-                        .show()
-                }
-                setImportButtonsEnabled(true)
+            }.onSuccess { result ->
+                Snackbar.make(
+                    binding.root,
+                    resources.getQuantityString(
+                        R.plurals.import_ok_courses,
+                        result.importedSessionCount,
+                        result.importedSessionCount,
+                    ),
+                    Snackbar.LENGTH_LONG,
+                )
+                    .setAnchorView(binding.btnImportPage)
+                    .show()
+                CourseImportPolicy.showInvalidCourseDialog(
+                    this@WebLoginActivity,
+                    result.rangeReport
+                )
+            }.onFailure { e ->
+                val message = getString(
+                    R.string.import_fail,
+                    (e as? ParserException)?.message
+                        ?: e.message
+                        ?: getString(R.string.err_import_failed),
+                )
+                Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG)
+                    .setAnchorView(binding.btnImportPage)
+                    .show()
             }
+            setImportButtonsEnabled(true)
         }
     }
 
@@ -646,6 +656,8 @@ class WebLoginActivity : AppCompatActivity() {
     private fun setImportButtonsEnabled(enabled: Boolean) {
         binding.btnImportPage.isEnabled = enabled
         binding.btnDeviceMode.isEnabled = enabled
+        binding.btnGo.isEnabled = enabled
+        binding.editUrl.isEnabled = enabled
     }
 
     /** 网页课表写入目标。 */
@@ -683,7 +695,8 @@ class WebLoginActivity : AppCompatActivity() {
         if (webViewDestroyed) return
         webViewDestroyed = true
         clearServiceWorkerInterception()
-        if (::getRequestInterceptor.isInitialized) getRequestInterceptor.close()
+        if (::webImportSource.isInitialized) webImportSource.close()
+        if (::webSessionClient.isInitialized) webSessionClient.close()
         webView.stopLoading()
         webView.webChromeClient = null
         (webView.parent as? ViewGroup)?.removeView(webView)
@@ -723,10 +736,5 @@ class WebLoginActivity : AppCompatActivity() {
                     "AppleWebKit/537.36 (KHTML, like Gecko) " +
                     "Chrome/$CHROME_MAJOR_VERSION.0.0.0 Safari/537.36"
 
-        /** getPageHtml：递归收集 iframe 内嵌文档 */
-        const val GET_PAGE_HTML_JS =
-            "(function(){function f(d){var s='';if(d){try{s=d.documentElement.outerHTML;}catch(e){}" +
-                    "var fr=d.querySelectorAll('iframe');for(var i=0;i<fr.length;i++){try{s+='\\n'+f(fr[i].contentDocument);}catch(e){}}}" +
-                    "return s;}return f(window.document);})()"
     }
 }

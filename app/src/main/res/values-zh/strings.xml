@@ -394,6 +394,8 @@
     <string name="credit_wakeup_bupt_desc">北邮教务系统适配与解析经验</string>
     <string name="credit_course_table_ics_formatter">wtlyu/Course-Table-ICS-Formatter</string>
     <string name="credit_course_table_ics_formatter_desc">浏览器端 ICS 课表生成与导出方案参考</string>
+    <string name="credit_course_adapter">VenomBat/CourseAdapter</string>
+    <string name="credit_course_adapter_desc">原生课程解析语义与兼容分支参考实现</string>
     <string name="credit_original_author">WakeUp 课程表原作者</string>
     <string name="credit_original_author_desc">suda-yzune</string>
     <string name="credit_community">开发者与用户</string>

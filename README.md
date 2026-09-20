@@ -189,6 +189,7 @@ Request 必须以 `dev` 为目标，标题使用 `<type>(<scope>): <subject>`。
 - [YZune/WakeupSchedule_Kotlin 的可审计镜像](https://github.com/ThaiCao/WakeupSchedule_Kotlin)；
 - [YZune/WakeUpSchedule](https://github.com/YZune/WakeUpSchedule)；
 - [xianfei/WakeupSchedule_BUPT](https://github.com/xianfei/WakeupSchedule_BUPT)；
+- [VenomBat/CourseAdapter](https://github.com/VenomBat/CourseAdapter)；
 - [wtlyu/Course-Table-ICS-Formatter](https://github.com/wtlyu/Course-Table-ICS-Formatter)。
 
 上游项目的代码、名称、图标及商标权利归各自权利人所有。第三方代码、资源、固定审计版本和许可证详见 [NOTICE.md](NOTICE.md)。

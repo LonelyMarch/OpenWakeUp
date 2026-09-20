@@ -272,6 +272,7 @@ class HtmlImportActivity : AppCompatActivity() {
         val uri = selectedFileUri ?: return
         binding.btnImport.isEnabled = false
         lifecycleScope.launch {
+            var importSucceeded = false
             runCatching {
                 val bytes = withContext(Dispatchers.IO) {
                     contentResolver.openInputStream(uri)?.use { it.readBytes() }
@@ -298,20 +299,13 @@ class HtmlImportActivity : AppCompatActivity() {
                 setResult(RESULT_OK)
                 CourseImportResult(previews.size, rangeReport)
             }.onSuccess { result ->
-                Snackbar.make(
-                    binding.root,
-                    resources.getQuantityString(
-                        R.plurals.import_ok_courses,
-                        result.importedSessionCount,
-                        result.importedSessionCount,
-                    ),
-                    Snackbar.LENGTH_LONG,
-                )
-                    .setAnchorView(binding.btnImport)
-                    .show()
-                CourseImportPolicy.showInvalidCourseDialog(
-                    this@HtmlImportActivity,
-                    result.rangeReport
+                importSucceeded = true
+                ImportSuccessFeedback.showThenReturnToSchedule(
+                    activity = this@HtmlImportActivity,
+                    root = binding.root,
+                    anchor = binding.btnImport,
+                    result = result,
+                    onNavigationSkipped = ::render,
                 )
             }.onFailure { error ->
                 val detail = (error as? ParserException)?.message
@@ -323,7 +317,8 @@ class HtmlImportActivity : AppCompatActivity() {
                     Snackbar.LENGTH_LONG,
                 ).setAnchorView(binding.btnImport).show()
             }
-            render()
+            // 成功后保持按钮禁用直到统一反馈流程结束，防止动画期间重复导入同一文件。
+            if (!importSucceeded) render()
         }
     }
 

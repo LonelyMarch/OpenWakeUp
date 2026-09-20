@@ -16,6 +16,7 @@ import com.openwakeup.schedule.core.validation.CourseRangePolicy
 import com.openwakeup.schedule.data.schedule.ScheduleRepository
 import com.openwakeup.schedule.feature.courseedit.AddCourseActivity
 import com.openwakeup.schedule.feature.settings.SettingsAppearance
+import java.io.Serializable
 import kotlin.math.roundToInt
 
 /** 导入完成后交给界面展示的结果。 */
@@ -27,7 +28,7 @@ internal data class CourseImportResult(
 /** 目标课表范围调整结果及非法课程清单。 */
 internal data class CourseImportRangeReport(
     val invalidCourses: List<InvalidImportedCourse>,
-)
+) : Serializable
 
 /** 一门非法导入课程及其具体越界范围。 */
 internal data class InvalidImportedCourse(
@@ -40,7 +41,7 @@ internal data class InvalidImportedCourse(
     val invalidDay: Boolean,
     val invalidWeek: Boolean,
     val invalidNode: Boolean,
-)
+) : Serializable
 
 /**
  * CSV、HTML 文件、ICS 文件和教务网页导入共用的课程写入与范围策略。

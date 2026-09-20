@@ -5,7 +5,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.view.View
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -352,25 +351,40 @@ class BackupImportActivity : AppCompatActivity() {
                 }
             }
             setResult(RESULT_OK)
-            setBusy(false)
-            render()
-            Toast.makeText(
-                this@BackupImportActivity,
-                getString(
+            ImportSuccessFeedback.showThenReturnToSchedule(
+                activity = this@BackupImportActivity,
+                root = binding.root,
+                anchor = binding.btnAction,
+                successMessage = getString(
                     R.string.backup_import_success,
                     result.scheduleCount,
                     result.timeTableCount,
                 ),
-                Toast.LENGTH_SHORT,
-            ).show()
-
-            if (result.globalSettingsOverwritten) {
-                val prefs = Prefs.get(applicationContext)
-                // 这两个调用可能重建当前 Activity，因此它们必须是本协程最后的界面相关操作。
-                AppThemeController.apply(prefs.themeMode)
-                AppLocaleResolver.apply(prefs.appLocale)
-            }
+                onNavigationStarted = {
+                    applyRestoredGlobalSettings(result.globalSettingsOverwritten)
+                },
+                onNavigationSkipped = {
+                    setBusy(false)
+                    render()
+                    applyRestoredGlobalSettings(result.globalSettingsOverwritten)
+                },
+            )
         }
+    }
+
+    /**
+     * 在成功反馈流程结束后应用备份恢复的主题与语言。
+     *
+     * 这两个 AppCompat API 都可能重建 Activity，因此必须等 Snackbar 完成淡出并且主课表启动请求
+     * 已经发出后调用；若用户已切到后台而跳过导航，也要应用设置并恢复当前页，保持备份语义完整。
+     *
+     * @param overwritten 本次备份是否包含并覆盖了全局设置
+     */
+    private fun applyRestoredGlobalSettings(overwritten: Boolean) {
+        if (!overwritten) return
+        val prefs = Prefs.get(applicationContext)
+        AppThemeController.apply(prefs.themeMode)
+        AppLocaleResolver.apply(prefs.appLocale)
     }
 
     /** 更新列表与操作按钮。 */

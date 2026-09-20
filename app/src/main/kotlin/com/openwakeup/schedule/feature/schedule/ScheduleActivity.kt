@@ -49,6 +49,8 @@ import com.openwakeup.schedule.feature.clock.ClockActivity
 import com.openwakeup.schedule.feature.courseedit.AddCourseActivity
 import com.openwakeup.schedule.feature.importexport.BackupExportActivity
 import com.openwakeup.schedule.feature.importexport.BackupImportActivity
+import com.openwakeup.schedule.feature.importexport.CourseImportPolicy
+import com.openwakeup.schedule.feature.importexport.CourseImportRangeReport
 import com.openwakeup.schedule.feature.importexport.CsvImportActivity
 import com.openwakeup.schedule.feature.importexport.HtmlImportActivity
 import com.openwakeup.schedule.feature.importexport.IcsExporter
@@ -157,6 +159,43 @@ class ScheduleActivity : AppCompatActivity() {
         setupBottomSheet()
         setupPager()
         observeData()
+        consumeImportResult(intent)
+    }
+
+    /**
+     * 接收 `singleTask` 主课表被再次启动时携带的新导入结果。
+     *
+     * @param intent 网页导入页返回主课表时创建的新 Intent
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        consumeImportResult(intent)
+    }
+
+    /**
+     * 在主课表视图上展示网页导入的越界课程警告，并确保同一个 Intent 只被消费一次。
+     *
+     * 成功消息已经在网页页完成淡入、停留和淡出，这里仅接收一次性的 `Serializable` 范围报告。
+     * 报告数据量只包含异常课程摘要，适合 Activity 间的短距离结果传递。先移除额外参数再投递
+     * UI，避免配置变化重建页面后重复提示。
+     *
+     * @param sourceIntent 可能携带网页导入结果的启动 Intent
+     */
+    private fun consumeImportResult(sourceIntent: Intent) {
+        if (!sourceIntent.hasExtra(EXTRA_IMPORT_RANGE_REPORT)) return
+        val rangeReport = sourceIntent.getSerializableExtra(
+            EXTRA_IMPORT_RANGE_REPORT,
+            CourseImportRangeReport::class.java,
+        )
+        sourceIntent.removeExtra(EXTRA_IMPORT_RANGE_REPORT)
+
+        // 等主课表完成本轮布局后再展示警告，保证弹窗的窗口令牌已经就绪。
+        ui.rootLayout.post {
+            rangeReport?.let { report ->
+                CourseImportPolicy.showInvalidCourseDialog(this, report)
+            }
+        }
     }
 
     /**
@@ -854,6 +893,10 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     companion object {
+        /** 网页导入成功后传递给主课表页的越界课程摘要。 */
+        const val EXTRA_IMPORT_RANGE_REPORT =
+            "com.openwakeup.schedule.extra.IMPORT_RANGE_REPORT"
+
         /** 厂商导航栏高度报告不准时，底部浮窗额外保留的视觉安全距离。 */
         private const val BOTTOM_SHEET_NAVIGATION_CLEARANCE_DP = 32
     }

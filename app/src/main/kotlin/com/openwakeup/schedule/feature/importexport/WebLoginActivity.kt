@@ -582,6 +582,7 @@ class WebLoginActivity : AppCompatActivity() {
     private fun importCurrentPage(mode: WebImportMode) {
         setImportButtonsEnabled(false)
         lifecycleScope.launch {
+            var importSucceeded = false
             runCatching {
                 // WebImportSource 只取得原始文本；这里是 App/Parser 唯一转换边界。
                 val payload = webImportSource.acquire(type)
@@ -622,20 +623,13 @@ class WebLoginActivity : AppCompatActivity() {
                     setResult(RESULT_OK)
                     CourseImportResult(previews.size, rangeReport)
             }.onSuccess { result ->
-                Snackbar.make(
-                    binding.root,
-                    resources.getQuantityString(
-                        R.plurals.import_ok_courses,
-                        result.importedSessionCount,
-                        result.importedSessionCount,
-                    ),
-                    Snackbar.LENGTH_LONG,
-                )
-                    .setAnchorView(binding.btnImportPage)
-                    .show()
-                CourseImportPolicy.showInvalidCourseDialog(
-                    this@WebLoginActivity,
-                    result.rangeReport
+                importSucceeded = true
+                ImportSuccessFeedback.showThenReturnToSchedule(
+                    activity = this@WebLoginActivity,
+                    root = binding.root,
+                    anchor = binding.btnImportPage,
+                    result = result,
+                    onNavigationSkipped = { setImportButtonsEnabled(true) },
                 )
             }.onFailure { e ->
                 val message = getString(
@@ -648,7 +642,8 @@ class WebLoginActivity : AppCompatActivity() {
                     .setAnchorView(binding.btnImportPage)
                     .show()
             }
-            setImportButtonsEnabled(true)
+            // 成功后保持按钮禁用直到返回主课表，防止淡入、停留和淡出期间再次提交同一页。
+            if (!importSucceeded) setImportButtonsEnabled(true)
         }
     }
 

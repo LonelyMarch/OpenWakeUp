@@ -15,7 +15,6 @@ import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.datepicker.MaterialDatePicker
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.openwakeup.schedule.R
@@ -41,7 +40,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
+import java.time.ZoneOffset
 
 /**
  * 课表设置：RecyclerView 设置项列表，
@@ -344,25 +343,31 @@ class ScheduleSettingsActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * 选择并保存第一教学周的第一天。
+     *
+     * MaterialDatePicker 的选中值固定表示 UTC 午夜，而课表中的 startDate 是不含时区的纯日期。
+     * 两个方向都必须使用 UTC 转换；若使用系统时区，UTC+8 的本地零点会落到前一天 16:00 UTC，
+     * 导致弹窗初始选中日期比当前设置早一天。
+     */
     private fun showDatePicker() {
         val t = table ?: return
         val current = runCatching { LocalDate.parse(t.startDate) }.getOrElse { return }
         val builder = MaterialDatePicker.Builder.datePicker()
             .setTitleText(R.string.setting_term_start_date)
         builder.setSelection(
-            current.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            current.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
         )
         builder.build().apply {
             addOnPositiveButtonClickListener { millis ->
-                val date = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+                // 选择结果同样按 UTC 读取，避免负时区设备保存成所选日期的前一天。
+                val date = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
                 updateTable {
                     it.copy(
                         startDate = date.toString(),
                         currentWeekOverride = AppDefaults.Table.CURRENT_WEEK_OVERRIDE,
                     )
                 }
-                Snackbar.make(binding.root, R.string.term_date_pick_hint, Snackbar.LENGTH_SHORT)
-                    .show()
             }
             show(supportFragmentManager, "date")
         }

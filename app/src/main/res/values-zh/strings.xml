@@ -413,7 +413,6 @@
     <string name="desc_stroke_color">将不透明度调到最低就可以隐藏边框了哦</string>
     <string name="desc_schedule_config_default">应用此项后，新建的课表会使用此课表中除了上课时间、课表名称、开学日期以外的配置，包括但不限于课表外观样式、一天节数等。但是后续对此课表配置的修改并不会同步到新的课表中</string>
     <string name="click_here_to_change">点击此处更改</string>
-    <string name="term_date_pick_hint">如果一周起始天是周三，那么就选择周三的日期。以此类推</string>
     <string name="title_course_manage">课程管理</string>
     <string name="menu_clear">清空</string>
     <string name="course_manage_hint">轻触编辑，长按删除</string>

@@ -427,7 +427,6 @@ Alpha is also adjustable (●ﾟωﾟ●)</string>
     <string name="desc_stroke_color">Set opacity to the lowest to hide the stroke</string>
     <string name="desc_schedule_config_default">Once applied, new schedules will reuse this schedule’s config except class time, name and start date — including appearance, lessons per day and more. Later changes to this schedule will not sync to those schedules</string>
     <string name="click_here_to_change">Tap to change</string>
-    <string name="term_date_pick_hint">If the semester starts on Wednesday, pick Wednesday’s date. And so on</string>
     <string name="title_course_manage">Courses</string>
     <string name="menu_clear">Clear</string>
     <string name="course_manage_hint">Tap to edit, long-press to delete</string>

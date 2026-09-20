@@ -22,8 +22,8 @@ android {
         minSdk = 33
         targetSdk = 36
         // Android 要求 versionCode 为正整数
-        versionCode = 1
-        versionName = "0.0.1"
+        versionCode = 2
+        versionName = "0.0.2"
     }
 
     androidResources {

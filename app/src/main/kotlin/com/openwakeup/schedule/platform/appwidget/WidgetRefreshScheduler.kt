@@ -22,6 +22,14 @@ object WidgetRefreshScheduler {
 
     private const val REQUEST_DATE_REFRESH = 0x7301
 
+    /** 根据真实实例决定保留还是取消当前阶段的跨日刷新。 */
+    fun reconcileDateRefresh(
+        context: Context,
+        snapshot: WidgetInstanceRegistry.Snapshot = WidgetInstanceRegistry.snapshot(context),
+    ) {
+        if (snapshot.hasAny) scheduleNextDateRefresh(context) else cancelDateRefresh(context)
+    }
+
     /** 刷新所有已添加的小部件，并重新安排下一个自然日刷新。 */
     fun refreshAndSchedule(context: Context) {
         refreshAll(context)
@@ -66,5 +74,19 @@ object WidgetRefreshScheduler {
         } else {
             alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
         }
+    }
+
+    /** 没有任何桌面实例时取消旧版本可能遗留的跨日闹钟。 */
+    fun cancelDateRefresh(context: Context) {
+        val appContext = context.applicationContext
+        val alarm = appContext.getSystemService(AlarmManager::class.java) ?: return
+        val pending = PendingIntent.getBroadcast(
+            appContext,
+            REQUEST_DATE_REFRESH,
+            Intent(appContext, ReminderReceiver::class.java).setAction(ACTION_DATE_REFRESH),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE,
+        ) ?: return
+        alarm.cancel(pending)
+        pending.cancel()
     }
 }

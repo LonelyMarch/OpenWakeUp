@@ -31,6 +31,7 @@ class ScheduleWidgetService : RemoteViewsService() {
         private val offset: Int = 0,
         private val widthDp: Float = 360f,
         private val widthScale: Float = 1f,
+        private val providedSnapshot: WidgetSnapshot? = null,
     ) : RemoteViewsFactory {
         private var snapshot: WidgetSnapshot? = null
         private var bitmap: Bitmap? = null
@@ -44,7 +45,8 @@ class ScheduleWidgetService : RemoteViewsService() {
 
         /** 工作线程装配整周，整周无课时交由 Provider 的空视图显示。 */
         override fun onDataSetChanged() {
-            snapshot = WidgetRepository.snapshot(context, offset)
+            // Provider 的内联集合路径已经读取过完整快照；系统服务兼容入口仍按需自行读取。
+            snapshot = providedSnapshot ?: WidgetRepository.snapshot(context, offset)
             val current = snapshot
             val visibleDays = (1..7)
                 .filter { it != 6 || current?.config?.showSat != false }

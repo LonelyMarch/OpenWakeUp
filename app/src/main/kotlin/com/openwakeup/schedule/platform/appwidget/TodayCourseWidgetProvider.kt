@@ -2,8 +2,6 @@ package com.openwakeup.schedule.platform.appwidget
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
-import android.appwidget.AppWidgetProvider
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -20,20 +18,10 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 /** “今日课程”小部件：按时间顺序显示当天课程的紧凑列表。 */
-class TodayCourseWidgetProvider : AppWidgetProvider() {
+class TodayCourseWidgetProvider : BaseScheduleWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, appWidgetIds: IntArray) {
         appWidgetIds.forEach { updateOne(context, manager, it) }
-    }
-
-    override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent)
-        if (intent.action == AppWidgetManager.ACTION_APPWIDGET_UPDATE) {
-            val manager = AppWidgetManager.getInstance(context)
-            manager.getAppWidgetIds(ComponentName(context, javaClass)).forEach {
-                updateOne(context, manager, it)
-            }
-        }
     }
 
     /** 更新单个今日课程小部件。 */
@@ -52,7 +40,11 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
 
         views.setRemoteCollectionAdapter(
             R.id.lv_course,
-            TodayCourseWidgetService.Factory(context, 0),
+            TodayCourseWidgetService.Factory(
+                context = context,
+                dayOffset = 0,
+                providedSnapshot = snapshot,
+            ),
         )
         views.setEmptyView(R.id.lv_course, android.R.id.empty)
         WidgetEmptyViewRenderer.apply(

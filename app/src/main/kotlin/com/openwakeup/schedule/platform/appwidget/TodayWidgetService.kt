@@ -19,6 +19,7 @@ class TodayWidgetService : RemoteViewsService() {
         private val context: Context,
         private val offset: Int = 0,
         private val widthDp: Float = 360f,
+        private val providedSnapshot: WidgetSnapshot? = null,
     ) : RemoteViewsFactory {
         private var snapshot: WidgetSnapshot? = null
         private var rows: List<Pair<CourseEntity, CourseDetailEntity>> = emptyList()
@@ -28,7 +29,8 @@ class TodayWidgetService : RemoteViewsService() {
 
         /** 自然日期查询覆盖周日到周一，以及学期边界和调课记录。 */
         override fun onDataSetChanged() {
-            snapshot = WidgetRepository.snapshot(context)
+            // 内联 RemoteCollectionItems 复用 Provider 已读取的快照，兼容服务入口才自行读库。
+            snapshot = providedSnapshot ?: WidgetRepository.snapshot(context)
             val date = LocalDate.now().plusDays(offset.toLong())
             rows = snapshot?.coursesOfDate(date)?.map { (course, detail, _) -> course to detail }
                 .orEmpty()

@@ -1,8 +1,6 @@
 package com.openwakeup.schedule.platform.appwidget
 
 import android.appwidget.AppWidgetManager
-import android.appwidget.AppWidgetProvider
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
@@ -21,7 +19,7 @@ import java.time.LocalDate
  * 一周课表小部件：标题区（日期/课表名/周次）+ 星期表头 tv_title0..7 +
  * lv_schedule 列表（整周一张网格位图）+ iv_settings/iv_back/iv_next 交互。
  */
-class ScheduleWidgetProvider : AppWidgetProvider() {
+class ScheduleWidgetProvider : BaseScheduleWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, appWidgetIds: IntArray) {
         for (id in appWidgetIds) updateOne(
@@ -43,15 +41,6 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
                 val offset = if (intent.action == ACTION_NEXT) 1 else 0
                 WidgetNavigation.setOffset(context, id, offset)
                 updateOne(context, AppWidgetManager.getInstance(context), id, offset)
-            }
-
-            AppWidgetManager.ACTION_APPWIDGET_UPDATE -> {
-                val manager = AppWidgetManager.getInstance(context)
-                onUpdate(
-                    context,
-                    manager,
-                    manager.getAppWidgetIds(ComponentName(context, javaClass))
-                )
             }
 
             else -> super.onReceive(context, intent)
@@ -169,7 +158,13 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
         }
         views.setRemoteCollectionAdapter(
             R.id.lv_schedule,
-            ScheduleWidgetService.Factory(context, weekOffset, contentWidthDp, widthScale),
+            ScheduleWidgetService.Factory(
+                context = context,
+                offset = weekOffset,
+                widthDp = contentWidthDp,
+                widthScale = widthScale,
+                providedSnapshot = snapshot,
+            ),
         )
         views.setEmptyView(R.id.lv_schedule, android.R.id.empty)
         views.setTextViewText(

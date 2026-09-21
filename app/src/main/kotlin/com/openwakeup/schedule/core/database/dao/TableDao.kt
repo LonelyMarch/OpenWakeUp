@@ -48,6 +48,16 @@ interface TableDao {
     @Update
     suspend fun update(table: TableEntity)
 
+    /**
+     * 批量更新课表。
+     *
+     * 用于排序写回及作息删除后的批量重新绑定，调用方负责在 Repository 事务中组织业务边界。
+     *
+     * @param tables 待更新的课表实体
+     */
+    @Update
+    suspend fun updateAll(tables: List<TableEntity>)
+
     @Delete
     suspend fun delete(table: TableEntity)
 }

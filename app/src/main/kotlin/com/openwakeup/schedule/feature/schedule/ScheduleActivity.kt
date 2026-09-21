@@ -23,7 +23,9 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.doOnLayout
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
@@ -62,9 +64,9 @@ import com.openwakeup.schedule.feature.settings.global.SettingsActivity
 import com.openwakeup.schedule.feature.settings.schedule.ScheduleSettingsActivity
 import com.openwakeup.schedule.feature.settings.timetable.TimeSettingsActivity
 import com.openwakeup.schedule.feature.settings.widget.WidgetSettingsActivity
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -518,82 +520,95 @@ class ScheduleActivity : AppCompatActivity(), WeekPageSnapshotProvider {
     }
 
     private fun observeData() {
-        // 当前表 + 该表课程/作息合为一条链：collectLatest 在切表时取消上一张表的课程收集，
-        // 避免"内层 Room Flow 永不结束 → 外层 StateFlow 新值被合并丢弃 → 换表后仍是旧课程"。
         lifecycleScope.launch {
-            repo.currentTable.collectLatest { t ->
-                if (t == null) {
-                    renderNoTableState()
-                    return@collectLatest
-                }
-                val previous = table
-                val tableChanged = previous?.id != t.id
-                // 周数/列数变化需要重建 ViewPager；仅改颜色等外观时保留当前页，避免跳回本周
-                val needRebuild = previous == null || tableChanged || previous.maxWeek != t.maxWeek
-                table = t
-                if (tableChanged) {
-                    // 新表课程尚未到达，先清掉上一张表的数据，防止页面闪出别的表的课
-                    courseSource = emptyList()
-                    times = emptyList()
-                    shifts = emptyList()
-                }
-                currentWeek =
-                    DateUtils.currentWeek(LocalDate.parse(t.startDate)).coerceIn(1, t.maxWeek)
-                displayWeek = if (needRebuild) {
-                    (if (t.currentWeekOverride > 0) t.currentWeekOverride else currentWeek)
-                        .coerceIn(1, t.maxWeek)
-                } else {
-                    displayWeek.coerceIn(1, t.maxWeek)
-                }
-                applyBackground(t.background)
-                if (needRebuild) {
-                    ui.viewPager.adapter = object : FragmentStateAdapter(this@ScheduleActivity) {
-                        override fun getItemCount(): Int = t.maxWeek
-                        override fun createFragment(position: Int): Fragment =
-                            WeekPageFragment.newInstance(position + 1).also(::bindWeekPageCallbacks)
-                    }
-                    ui.viewPager.setCurrentItem(displayWeek - 1, false)
-                }
-                // 先落到 valueFrom 再改上界，避免旧 value 超出新 maxWeek 时 Slider 校验抛异常
-                ui.sliderWeek.value = 1f
-                ui.sliderWeek.valueFrom = 1f
-                ui.sliderWeek.valueTo = t.maxWeek.toFloat()
-                ui.sliderWeek.value = displayWeek.toFloat()
-                refreshHeaders()
-                tableAdapter?.setCurrentId(t.id)
-                refreshPage()
+            // lifecycleScope 只会在 Activity 销毁时取消；repeatOnLifecycle 让主页不可见时同时
+            // 解除 Room 与偏好 Flow 的订阅，避免后台继续查询、分配列表并触发页面重绘。
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // 当前课表链会长期挂起，必须与另外两条 Flow 分别放入子协程并行收集。
+                launch {
+                    // collectLatest 在切表时取消上一张表的课程收集，避免旧表 Flow 持续占用内存。
+                    repo.currentTable.collectLatest { t ->
+                        if (t == null) {
+                            renderNoTableState()
+                            return@collectLatest
+                        }
+                        val previous = table
+                        val tableChanged = previous?.id != t.id
+                        // 周数变化需要重建 ViewPager；仅改颜色等外观时保留当前页。
+                        val needRebuild =
+                            previous == null || tableChanged || previous.maxWeek != t.maxWeek
+                        table = t
+                        if (tableChanged) {
+                            // 新表课程尚未到达，先清掉上一张表的数据，防止页面闪出别的表的课。
+                            courseSource = emptyList()
+                            times = emptyList()
+                            shifts = emptyList()
+                        }
+                        currentWeek = DateUtils.currentWeek(LocalDate.parse(t.startDate))
+                            .coerceIn(1, t.maxWeek)
+                        displayWeek = if (needRebuild) {
+                            (if (t.currentWeekOverride > 0) t.currentWeekOverride else currentWeek)
+                                .coerceIn(1, t.maxWeek)
+                        } else {
+                            displayWeek.coerceIn(1, t.maxWeek)
+                        }
+                        applyBackground(t.background)
+                        if (needRebuild) {
+                            ui.viewPager.adapter =
+                                object : FragmentStateAdapter(this@ScheduleActivity) {
+                                    override fun getItemCount(): Int = t.maxWeek
 
-                combine(
-                    repo.coursesWithDetails(t.id),
-                    repo.timeDetails(t.timeTableId),
-                    repo.scheduleShifts(t.id),
-                ) { cwds, times, shifts ->
-                    Triple(
-                        cwds,
-                        times,
-                        shifts
-                    )
-                }.collect { (cwds, times, shifts) ->
-                    val visibleNodeLimit = CourseRangePolicy.visibleNodeLimit(t.nodes)
-                    val visibleCourses = cwds.filter { courseWithDetails ->
-                        CourseRangePolicy.isCourseValid(courseWithDetails.details, visibleNodeLimit)
+                                    override fun createFragment(position: Int): Fragment =
+                                        WeekPageFragment.newInstance(position + 1)
+                                            .also(::bindWeekPageCallbacks)
+                                }
+                            ui.viewPager.setCurrentItem(displayWeek - 1, false)
+                        }
+                        // 先落到 valueFrom 再改上界，避免旧值超出新 maxWeek 时 Slider 抛异常。
+                        ui.sliderWeek.value = 1f
+                        ui.sliderWeek.valueFrom = 1f
+                        ui.sliderWeek.valueTo = t.maxWeek.toFloat()
+                        ui.sliderWeek.value = displayWeek.toFloat()
+                        refreshHeaders()
+                        tableAdapter?.setCurrentId(t.id)
+                        refreshPage()
+
+                        combine(
+                            repo.coursesWithDetails(t.id),
+                            repo.timeDetails(t.timeTableId),
+                            repo.scheduleShifts(t.id),
+                        ) { cwds, times, shifts ->
+                            Triple(cwds, times, shifts)
+                        }.collect { (cwds, times, shifts) ->
+                            val visibleNodeLimit = CourseRangePolicy.visibleNodeLimit(t.nodes)
+                            val visibleCourses = cwds.filter { courseWithDetails ->
+                                CourseRangePolicy.isCourseValid(
+                                    courseWithDetails.details,
+                                    visibleNodeLimit,
+                                )
+                            }
+                            // 非法课程保留在数据库和课程管理页，主页只接收范围完整合法的数据。
+                            courseSource = visibleCourses.flatMap { courseWithDetails ->
+                                courseWithDetails.details.map { detail ->
+                                    courseWithDetails.course to detail
+                                }
+                            }
+                            this@ScheduleActivity.times = times
+                            this@ScheduleActivity.shifts = shifts
+                            refreshPage()
+                        }
                     }
-                    // 非法课程保留在数据库和课程管理页，主课表只接收范围完整合法的课程。
-                    courseSource = visibleCourses.flatMap { courseWithDetails ->
-                        courseWithDetails.details.map { detail -> courseWithDetails.course to detail }
-                    }
-                    this@ScheduleActivity.times = times
-                    this@ScheduleActivity.shifts = shifts
-                    refreshPage()
+                }
+
+                launch {
+                    repo.tables().collect { tables -> tableAdapter?.submit(tables) }
+                }
+
+                launch {
+                    // 全局日期格式变化时立即重绘主页日期行。
+                    Prefs.get(this@ScheduleActivity).dateFormatFlow.collect { refreshHeaders() }
                 }
             }
-        }
-        lifecycleScope.launch {
-            repo.tables().collect { tables -> tableAdapter?.submit(tables) }
-        }
-        // 全局日期格式变化时立即重绘主页日期行（WeekPageFragment 在 onResume 拉取最新格式）。
-        lifecycleScope.launch {
-            Prefs.get(this@ScheduleActivity).dateFormatFlow.collect { refreshHeaders() }
         }
     }
 

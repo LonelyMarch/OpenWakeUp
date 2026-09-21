@@ -272,6 +272,80 @@ class ScheduleRepository(context: Context) {
         ),
     )
 
+    /**
+     * 在单次 Room 事务中应用完整课程导入。
+     *
+     * 覆盖模式先清空旧课程和调课记录，然后更新课表范围及可选的 ICS 学期日期，最后批量写入
+     * 课程与时间段。任意步骤失败都会回滚，外部 Room Flow 只会观察到提交后的最终状态。
+     *
+     * @param request 已由导入策略完成分组、去重和范围计算的写入请求
+     */
+    internal suspend fun applyCourseImport(request: CourseImportWriteRequest) {
+        db.withTransaction {
+            val existingTable = requireNotNull(tableDao.tableOnce(request.tableId)) {
+                "Target schedule does not exist"
+            }
+            if (request.overwriteExisting) {
+                clearCoursesInTransaction(request.tableId)
+            }
+
+            val updatedTable = existingTable.copy(
+                maxWeek = maxOf(existingTable.maxWeek, request.targetMaxWeek)
+                    .coerceIn(1, AppDefaults.Table.MAX_SUPPORTED_WEEKS),
+                startDate = request.semesterStartDate ?: existingTable.startDate,
+                currentWeekOverride = if (request.resetCurrentWeekOverride) {
+                    AppDefaults.Table.CURRENT_WEEK_OVERRIDE
+                } else {
+                    existingTable.currentWeekOverride
+                },
+            )
+            if (updatedTable != existingTable) {
+                tableDao.update(updatedTable)
+            }
+            insertCoursesInTransaction(request.tableId, request.courses)
+        }
+    }
+
+    /**
+     * 批量插入课程主体，并利用返回主键一次性构造全部时间段。
+     *
+     * @param tableId 所属课表主键
+     * @param courses 待写入的课程模型
+     */
+    private suspend fun insertCoursesInTransaction(
+        tableId: Long,
+        courses: List<CourseWriteModel>,
+    ) {
+        if (courses.isEmpty()) return
+        val courseIds = courseDao.insertAll(
+            courses.map { course ->
+                CourseEntity(
+                    tableId = tableId,
+                    courseName = course.name,
+                    color = course.color,
+                    credit = course.credit,
+                    note = course.note.take(300),
+                )
+            },
+        )
+        check(courseIds.size == courses.size) {
+            "Inserted course count does not match the import request"
+        }
+        val details = courses.zip(courseIds).flatMap { (course, courseId) ->
+            course.details.map { detail ->
+                detail.copy(
+                    id = 0,
+                    courseId = courseId,
+                    teacher = detail.teacher.ifBlank { course.teacher },
+                    room = detail.room.ifBlank { course.room },
+                )
+            }
+        }
+        if (details.isNotEmpty()) {
+            detailDao.insertAll(details)
+        }
+    }
+
     /** 新建课程（1 课程 + N 时间段） */
     suspend fun addCourse(
         tableId: Long,

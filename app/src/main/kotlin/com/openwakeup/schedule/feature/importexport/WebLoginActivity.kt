@@ -599,29 +599,34 @@ class WebLoginActivity : AppCompatActivity() {
                     val currentTable = repo.currentTableId()
                         .takeIf { tableId -> tableId > 0 }
                         ?.let { tableId -> repo.tableOnce(tableId) }
-                    val tableId = when {
-                        mode == WebImportMode.OVERWRITE_CURRENT && currentTable != null -> {
-                            repo.clearCourses(currentTable.id)
-                            currentTable.id
-                        }
+                    val overwriteExisting =
+                        mode == WebImportMode.OVERWRITE_CURRENT && currentTable != null
+                    val targetTable = when {
+                        overwriteExisting -> requireNotNull(currentTable)
 
                         else -> {
                             val fallbackStart = LocalDate.now()
                                 .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
                                 .toString()
-                            repo.createTable(
+                            val tableId = repo.createTable(
                                 // 教务导入没有源文件名，按实际创建时刻生成唯一且可辨识的名称。
                                 name = ImportTableNames.fromSchoolImport(),
                                 startDate = currentTable?.startDate ?: fallbackStart,
                                 // 新建导入以默认配置为基础，不继承当前课表的周数。
                                 maxWeek = AppDefaults.Table.MAX_WEEK,
                             )
+                            repo.tableOnce(tableId)
+                                ?: error("Target schedule does not exist")
                         }
                     }
-                    val rangeReport = CourseImportPolicy.prepareTarget(repo, tableId, previews)
-                    CourseImportPolicy.writeCourses(repo, tableId, previews)
+                    val preparedImport = CourseImportPolicy.prepareImport(
+                        table = targetTable,
+                        previews = previews,
+                        overwriteExisting = overwriteExisting,
+                    )
+                    repo.applyCourseImport(preparedImport.writeRequest)
                     setResult(RESULT_OK)
-                    CourseImportResult(previews.size, rangeReport)
+                    CourseImportResult(previews.size, preparedImport.rangeReport)
             }.onSuccess { result ->
                 importSucceeded = true
                 ImportSuccessFeedback.showThenReturnToSchedule(

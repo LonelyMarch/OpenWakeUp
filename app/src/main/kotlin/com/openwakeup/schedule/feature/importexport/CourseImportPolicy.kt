@@ -12,8 +12,10 @@ import com.openwakeup.parser.CoursePreview
 import com.openwakeup.schedule.R
 import com.openwakeup.schedule.core.config.AppDefaults
 import com.openwakeup.schedule.core.database.entity.CourseDetailEntity
+import com.openwakeup.schedule.core.database.entity.TableEntity
 import com.openwakeup.schedule.core.validation.CourseRangePolicy
-import com.openwakeup.schedule.data.schedule.ScheduleRepository
+import com.openwakeup.schedule.data.schedule.CourseImportWriteRequest
+import com.openwakeup.schedule.data.schedule.CourseWriteModel
 import com.openwakeup.schedule.feature.courseedit.AddCourseActivity
 import com.openwakeup.schedule.feature.settings.SettingsAppearance
 import java.io.Serializable
@@ -22,6 +24,17 @@ import kotlin.math.roundToInt
 /** 导入完成后交给界面展示的结果。 */
 internal data class CourseImportResult(
     val importedSessionCount: Int,
+    val rangeReport: CourseImportRangeReport,
+)
+
+/**
+ * 导入策略准备出的数据库请求与界面反馈。
+ *
+ * @property writeRequest 可直接交给 Repository 原子写入的请求
+ * @property rangeReport 导入完成后向用户展示的越界课程报告
+ */
+internal data class PreparedCourseImport(
+    val writeRequest: CourseImportWriteRequest,
     val rangeReport: CourseImportRangeReport,
 )
 
@@ -52,19 +65,25 @@ internal data class InvalidImportedCourse(
 internal object CourseImportPolicy {
 
     /**
-     * 根据解析结果扩展目标课表周数并生成非法课程报告。
+     * 将解析器输出整理为无副作用的数据库写入请求。
      *
-     * @param repo 课表数据仓库
-     * @param tableId 覆盖或新建后得到的目标课表 id
+     * 本函数只负责范围计算、非法数据报告、逻辑课程分组和时间段去重，不访问数据库。调用方
+     * 完成全部准备后再把请求交给 Repository，覆盖模式不会提前删除用户的原有课程。
+     *
+     * @param table 导入目标课表的当前数据库快照
      * @param previews 解析器输出的全部课程时间段
-     * @return 目标范围与非法课程清单
+     * @param overwriteExisting 是否覆盖目标课表现有课程
+     * @param semesterStartDate ICS 导入解析出的学期开始日期；其他来源为 `null`
+     * @param resetCurrentWeekOverride 是否清除手动当前周并恢复自动计算
+     * @return 原子写入请求与非法课程报告
      */
-    suspend fun prepareTarget(
-        repo: ScheduleRepository,
-        tableId: Long,
+    fun prepareImport(
+        table: TableEntity,
         previews: List<CoursePreview>,
-    ): CourseImportRangeReport {
-        val table = requireNotNull(repo.tableOnce(tableId)) { "Target schedule does not exist" }
+        overwriteExisting: Boolean,
+        semesterStartDate: String? = null,
+        resetCurrentWeekOverride: Boolean = false,
+    ): PreparedCourseImport {
         // 作息不足只影响时间文字，课程是否合法始终以“一天课程节数”为准。
         val visibleNodeLimit = CourseRangePolicy.visibleNodeLimit(table.nodes)
         val importedMaxWeek = previews.maxOfOrNull { preview ->
@@ -74,10 +93,6 @@ internal object CourseImportPolicy {
             table.maxWeek.coerceAtMost(AppDefaults.Table.MAX_SUPPORTED_WEEKS),
             importedMaxWeek.coerceAtMost(AppDefaults.Table.MAX_SUPPORTED_WEEKS),
         )
-        if (targetMaxWeek != table.maxWeek) {
-            // 仅扩展周数；绑定作息和课表节数均保持用户导入前的配置。
-            repo.updateTable(table.copy(maxWeek = targetMaxWeek))
-        }
 
         val invalidCourses = previews.mapNotNull { preview ->
             val endNode = preview.startNode.toLong() + preview.step.toLong() - 1L
@@ -112,35 +127,29 @@ internal object CourseImportPolicy {
                 issue.endNode,
             )
         }
-        return CourseImportRangeReport(invalidCourses)
-    }
-
-    /**
-     * 把扁平课程预览合并为逻辑课程后写入数据库。
-     *
-     * @param repo 课表数据仓库
-     * @param tableId 导入目标课表 id
-     * @param previews 解析器输出的课程时间段
-     */
-    suspend fun writeCourses(
-        repo: ScheduleRepository,
-        tableId: Long,
-        previews: List<CoursePreview>,
-    ) {
         val palette = AddCourseActivity.PALETTE
-        previews.groupBy { preview ->
+        val courses = previews.groupBy { preview ->
             CourseIdentity(preview.name, preview.teacher, preview.room, preview.color)
-        }.entries.forEachIndexed { index, (identity, coursePreviews) ->
-            val details = coursePreviews.map { preview -> preview.toDetail() }.distinct()
-            repo.addCourse(
-                tableId = tableId,
+        }.entries.mapIndexed { index, (identity, coursePreviews) ->
+            CourseWriteModel(
                 name = identity.name,
                 color = identity.color ?: palette[index % palette.size],
                 teacher = identity.teacher,
                 room = identity.room,
-                details = details,
+                details = coursePreviews.map { preview -> preview.toDetail() }.distinct(),
             )
         }
+        return PreparedCourseImport(
+            writeRequest = CourseImportWriteRequest(
+                tableId = table.id,
+                overwriteExisting = overwriteExisting,
+                targetMaxWeek = targetMaxWeek,
+                courses = courses,
+                semesterStartDate = semesterStartDate,
+                resetCurrentWeekOverride = resetCurrentWeekOverride,
+            ),
+            rangeReport = CourseImportRangeReport(invalidCourses),
+        )
     }
 
     /**

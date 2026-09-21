@@ -286,18 +286,22 @@ class HtmlImportActivity : AppCompatActivity() {
                 val currentTable = repo.currentTableId()
                     .takeIf { tableId -> tableId > 0 }
                     ?.let { tableId -> repo.tableOnce(tableId) }
-                val targetTableId = when {
-                    mode == HtmlImportMode.OVERWRITE_CURRENT && currentTable != null -> {
-                        repo.clearCourses(currentTable.id)
-                        currentTable.id
-                    }
+                val overwriteExisting =
+                    mode == HtmlImportMode.OVERWRITE_CURRENT && currentTable != null
+                val targetTable = when {
+                    overwriteExisting -> requireNotNull(currentTable)
                     // 没有可覆盖对象时，即使用户选择“覆盖”，也必须创建第一张课表。
-                    else -> createImportTable(currentTable)
+                    else -> repo.tableOnce(createImportTable(currentTable))
+                        ?: error("Target schedule does not exist")
                 }
-                val rangeReport = CourseImportPolicy.prepareTarget(repo, targetTableId, previews)
-                CourseImportPolicy.writeCourses(repo, targetTableId, previews)
+                val preparedImport = CourseImportPolicy.prepareImport(
+                    table = targetTable,
+                    previews = previews,
+                    overwriteExisting = overwriteExisting,
+                )
+                repo.applyCourseImport(preparedImport.writeRequest)
                 setResult(RESULT_OK)
-                CourseImportResult(previews.size, rangeReport)
+                CourseImportResult(previews.size, preparedImport.rangeReport)
             }.onSuccess { result ->
                 importSucceeded = true
                 ImportSuccessFeedback.showThenReturnToSchedule(

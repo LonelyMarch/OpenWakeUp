@@ -72,7 +72,7 @@ import java.time.LocalDate
  * tv_week→锚定菜单（设置当前周/回到本周/新建课表）、ib_add→加课、ib_import→导入菜单（含子菜单）、
  * ib_share→导出菜单、ib_more→展开底部菜单（BACK 收起）、宫格跳转、周次滑条换周、课表切换。
  */
-class ScheduleActivity : AppCompatActivity() {
+class ScheduleActivity : AppCompatActivity(), WeekPageSnapshotProvider {
 
     private val repo by lazy { ScheduleRepository(this) }
     private lateinit var ui: ScheduleActivityUI
@@ -80,11 +80,17 @@ class ScheduleActivity : AppCompatActivity() {
     private var table: TableEntity? = null
     private var displayWeek = 1
     private var currentWeek = 0
-    private var courses: List<CourseEntity> = emptyList()
-    private var details: List<CourseDetailEntity> = emptyList()
+    /** 主课表已通过范围校验的“课程—时间段”扁平快照，避免刷新页面时反复做嵌套过滤。 */
+    private var courseSource: List<Pair<CourseEntity, CourseDetailEntity>> = emptyList()
     private var times: List<TimeDetailEntity> = emptyList()
     private var shifts: List<ScheduleShiftEntity> = emptyList()
     private var tableAdapter: TableNameAdapter? = null
+
+    /** 当前宿主自己的周页面快照；只随 Activity 生命周期存在，不再跨页面使用静态字段共享。 */
+    private var weekPageSnapshot: WeekPageSnapshot? = null
+
+    /** 为新建、恢复或重新显示的周页面提供最新主页数据。 */
+    override fun currentWeekPageSnapshot(): WeekPageSnapshot? = weekPageSnapshot
 
     private val addCourseLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -516,8 +522,7 @@ class ScheduleActivity : AppCompatActivity() {
                 table = t
                 if (tableChanged) {
                     // 新表课程尚未到达，先清掉上一张表的数据，防止页面闪出别的表的课
-                    courses = emptyList()
-                    details = emptyList()
+                    courseSource = emptyList()
                     times = emptyList()
                     shifts = emptyList()
                 }
@@ -563,9 +568,9 @@ class ScheduleActivity : AppCompatActivity() {
                         CourseRangePolicy.isCourseValid(courseWithDetails.details, visibleNodeLimit)
                     }
                     // 非法课程保留在数据库和课程管理页，主课表只接收范围完整合法的课程。
-                    courses = visibleCourses.map { courseWithDetails -> courseWithDetails.course }
-                    details =
-                        visibleCourses.flatMap { courseWithDetails -> courseWithDetails.details }
+                    courseSource = visibleCourses.flatMap { courseWithDetails ->
+                        courseWithDetails.details.map { detail -> courseWithDetails.course to detail }
+                    }
                     this@ScheduleActivity.times = times
                     this@ScheduleActivity.shifts = shifts
                     refreshPage()
@@ -602,31 +607,20 @@ class ScheduleActivity : AppCompatActivity() {
     private fun refreshPage() {
         val hasTable = table != null
         val t = table ?: createNoTablePreview()
-        val snapshot = WeekPageFragment.Snapshot(
+        val snapshot = WeekPageSnapshot(
             table = t,
             times = if (hasTable) times else emptyList(),
-            currentWeek = if (hasTable) currentWeek.coerceIn(0, t.maxWeek) else 1,
             startDate = LocalDate.parse(t.startDate),
-            source = if (hasTable) {
-                courses.flatMap { course ->
-                    details.filter { detail -> detail.courseId == course.id }
-                        .map { detail -> course to detail }
-                }
-            } else {
-                emptyList()
-            },
+            source = if (hasTable) courseSource else emptyList(),
             shifts = if (hasTable) shifts else emptyList(),
         )
-        WeekPageFragment.latest = snapshot
+        weekPageSnapshot = snapshot
         val fragment =
             supportFragmentManager.findFragmentByTag("f${displayWeek - 1}") as? WeekPageFragment
         fragment?.let { page ->
             // 主题切换后 FragmentManager 会恢复旧页面实例；恢复实例必须重新绑定 Activity 回调。
             bindWeekPageCallbacks(page)
-            page.update(
-                snapshot.table, snapshot.times, displayWeek,
-                snapshot.currentWeek, snapshot.startDate, snapshot.source, snapshot.shifts,
-            )
+            page.update(snapshot)
         }
     }
 
@@ -640,8 +634,7 @@ class ScheduleActivity : AppCompatActivity() {
         table = null
         currentWeek = 1
         displayWeek = 1
-        courses = emptyList()
-        details = emptyList()
+        courseSource = emptyList()
         times = emptyList()
         shifts = emptyList()
 

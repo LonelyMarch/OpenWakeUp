@@ -30,6 +30,8 @@ import com.openwakeup.schedule.databinding.ActivityTableConfigBinding
 import com.openwakeup.schedule.feature.courseedit.ColorPickerDialog
 import com.openwakeup.schedule.feature.schedule.ScheduleThemeColors
 import com.openwakeup.schedule.feature.schedule.WeekPageFragment
+import com.openwakeup.schedule.feature.schedule.WeekPageSnapshot
+import com.openwakeup.schedule.feature.schedule.WeekPageSnapshotProvider
 import com.openwakeup.schedule.feature.settings.CategoryItem
 import com.openwakeup.schedule.feature.settings.HeaderItem
 import com.openwakeup.schedule.feature.settings.NumberItem
@@ -50,7 +52,7 @@ import java.time.LocalDate
  * 颜色行走取色器（alpha 可调，id1/2 落盘前 alpha≥60），背景行点击选择类型；全部可配置项
  * 均支持按住 1.6 秒并确认后恢复默认。数值行弹 dialog_edit_text，改动即时写库并刷新预览。
  */
-class TableConfigActivity : AppCompatActivity() {
+class TableConfigActivity : AppCompatActivity(), WeekPageSnapshotProvider {
 
     private val repo by lazy { ScheduleRepository(this) }
     private lateinit var binding: ActivityTableConfigBinding
@@ -59,6 +61,12 @@ class TableConfigActivity : AppCompatActivity() {
     private var weekFragment: WeekPageFragment? = null
     private var times: List<TimeDetailEntity> = emptyList()
     private var source: List<Pair<CourseEntity, CourseDetailEntity>> = emptyList()
+
+    /** 外观预览专用快照，避免与主课表页面通过进程级静态字段互相覆盖。 */
+    private var previewSnapshot: WeekPageSnapshot? = null
+
+    /** 为系统恢复或刚创建 View 的预览 Fragment 提供本页面自己的最新数据。 */
+    override fun currentWeekPageSnapshot(): WeekPageSnapshot? = previewSnapshot
 
     private val pickImageLauncher =
         registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -120,15 +128,18 @@ class TableConfigActivity : AppCompatActivity() {
         }
     }
 
-    /** 推送预览数据（复用周页 Fragment；共享快照供其 onResume 拉取） */
+    /** 推送预览数据；复用周页 Fragment，但快照只保存在当前外观设置 Activity 中。 */
     private fun pushPreview() {
         val t = table ?: return
         val week = (t.currentWeekOverride.takeIf { it > 0 }
             ?: DateUtils.currentWeek(LocalDate.parse(t.startDate))).coerceIn(1, t.maxWeek)
-        WeekPageFragment.latest = WeekPageFragment.Snapshot(
-            t, times, DateUtils.currentWeek(LocalDate.parse(t.startDate)).coerceIn(0, t.maxWeek),
-            LocalDate.parse(t.startDate), source
+        val snapshot = WeekPageSnapshot(
+            table = t,
+            times = times,
+            startDate = LocalDate.parse(t.startDate),
+            source = source,
         )
+        previewSnapshot = snapshot
         val existing = weekFragment
         if (existing == null) {
             val f = WeekPageFragment.newInstance(week).apply {
@@ -142,11 +153,7 @@ class TableConfigActivity : AppCompatActivity() {
                 .commit()
         } else {
             existing.isQuickAddEnabled = false
-            existing.update(
-                t, times, week,
-                DateUtils.currentWeek(LocalDate.parse(t.startDate)).coerceIn(0, t.maxWeek),
-                LocalDate.parse(t.startDate), source
-            )
+            existing.update(snapshot)
         }
     }
 

@@ -52,22 +52,36 @@ class WeekPageFragment : Fragment() {
     private var table: TableEntity? = null
     private var times: List<TimeDetailEntity> = emptyList()
     private var week = 1
-    private var currentWeek = 0
     private var startDate: LocalDate = LocalDate.now()
     private var source: List<Pair<CourseEntity, CourseDetailEntity>> = emptyList()
     private var shifts: List<ScheduleShiftEntity> = emptyList()
 
+    /** 当前视图树对应的结构键；只有会改变节点数量或布局几何的配置才参与比较。 */
+    private var renderedLayoutKey: WeekPageLayoutKey? = null
+
+    /** 当前视图树已经展示的内容键；完全相同的数据再次到达时直接跳过重绘。 */
+    private var renderedContentKey: WeekPageContentKey? = null
+
+    /** 周页面滚动位置只保存为整数，不通过保留整棵 View 树维持视觉状态。 */
+    private var savedScrollY = 0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         week = arguments?.getInt("week") ?: 1
+        savedScrollY = savedInstanceState?.getInt(STATE_SCROLL_Y) ?: 0
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        // Fragment 可能由 ViewPager2 新建，也可能由 FragmentManager 在进程恢复后重建。
+        // 两种情况下都向当前宿主读取数据，避免访问另一个 Activity 留下的静态快照。
+        pullSnapshotFromHost()
     }
 
     override fun onResume() {
         super.onResume()
-        // 数据由 ScheduleActivity 推送到共享快照，页面就绪后自行拉取（Fragment 创建早于首次数据推送）
-        latest?.let { s ->
-            update(s.table, s.times, week, s.currentWeek, s.startDate, s.source, s.shifts)
-        }
+        // 离屏页面重新成为当前页时再取一次宿主快照；内容键会过滤完全相同的重复数据。
+        pullSnapshotFromHost()
     }
 
     override fun onPause() {
@@ -76,11 +90,62 @@ class WeekPageFragment : Fragment() {
         quickAdd?.cancelDraft()
     }
 
+    /** 保存轻量滚动状态；系统回收进程后重建页面时无需保留任何旧 View 实例。 */
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt(STATE_SCROLL_Y, scrollView?.scrollY ?: savedScrollY)
+        super.onSaveInstanceState(outState)
+    }
+
+    /**
+     * 释放 Fragment 视图生命周期内创建的完整课表树。
+     *
+     * ViewPager2 允许保留 Fragment 实例并销毁离屏页的 View。这里必须解除 Fragment 字段到
+     * View 的全部强引用，否则页面虽然收到 `onDestroyView()`，旧课程卡、面板和 Context 仍无法
+     * 回收。课表数据、周次和滚动整数继续保留，回到该周时再按最新宿主快照创建新 View。
+     */
+    override fun onDestroyView() {
+        savedScrollY = scrollView?.scrollY ?: savedScrollY
+        quickAdd?.apply {
+            cancelDraft()
+            onFinished = null
+        }
+        panelViews.forEach { panel -> panel.setOnTouchListener(null) }
+        if (gridId != View.NO_ID) {
+            pageRoot?.findViewById<GridBackgroundView>(gridId)?.apply {
+                columnViews = emptyList()
+                rowViews = emptyList()
+            }
+        }
+        panelViews.clear()
+        dayHeaderViews.clear()
+        nodeStartViews.clear()
+        nodeEndViews.clear()
+        pageRoot = null
+        container = null
+        scrollView = null
+        quickAdd = null
+        monthHeaderView = null
+        emptyView = null
+        blankView = null
+        gridId = View.NO_ID
+        renderedLayoutKey = null
+        renderedContentKey = null
+        super.onDestroyView()
+    }
+
+    /** Fragment 脱离宿主后解除函数回调，避免被外部错误持有时继续引用已经销毁的 Activity。 */
+    override fun onDetach() {
+        onCourseClick = null
+        onQuickAddRequest = null
+        super.onDetach()
+    }
+
     /** 课程卡点击（跳课程详情弹窗） */
     var onCourseClick: ((detailId: Long, week: Int) -> Unit)? = null
 
     private var pageRoot: ConstraintLayout? = null
     private var container: FrameLayout? = null
+    private var scrollView: ScrollView? = null
     private val panelViews = mutableListOf<FrameLayout>()
 
     /** 快速加课草稿层与完成回调（ScheduleActivity 借此打开已预填的添加课程页） */
@@ -114,48 +179,74 @@ class WeekPageFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        val host = FrameLayout(requireContext())
-        this.container = host
-        val t = table
-        if (pageRoot == null && t != null) {
-            build(t, times)
-            refresh()
+        return FrameLayout(requireContext()).also { host ->
+            // onDestroyView 后一定创建全新的宿主容器；旧 View 不会重新挂载到新窗口或新主题。
+            this.container = host
         }
-        pageRoot?.let { host.addView(it, FrameLayout.LayoutParams(-1, -1)) }
-        return host
     }
 
-    /** 由 ScheduleActivity 在数据就绪后调用；首次触发构建 */
-    fun update(
-        table: TableEntity,
-        times: List<TimeDetailEntity>,
-        week: Int,
-        currentWeek: Int,
-        startDate: LocalDate,
-        source: List<Pair<CourseEntity, CourseDetailEntity>>,
-        shifts: List<ScheduleShiftEntity> = emptyList(),
-    ) {
+    /**
+     * 由宿主在数据就绪或发生变化后调用。
+     *
+     * Fragment 尚未创建 View 时只保存轻量数据；View 已存在时根据布局键与内容键决定重建骨架、
+     * 仅刷新课程内容或完全跳过。页面周次始终以 Fragment 参数为准，避免宿主可见页切换时把
+     * 一个周次误写给相邻的离屏页面。
+     *
+     * @param snapshot 当前宿主最新的周页面数据
+     */
+    internal fun update(snapshot: WeekPageSnapshot) {
+        val table = snapshot.table
         // 周页面只消费显示专用作息：行数由课表配置决定，真实作息不足的尾部统一补为
         // 24:00-24:00；该列表不会回写数据库，也不会进入提醒时间计算。
-        val displayTimes = ScheduleNodeResolver.resolveDisplayTimes(table.nodes, times)
-        val rebuild = this.table != table || this.times != displayTimes || pageRoot == null
+        val displayTimes = ScheduleNodeResolver.resolveDisplayTimes(table.nodes, snapshot.times)
         this.table = table
         this.times = displayTimes
-        this.week = week
-        this.currentWeek = currentWeek
-        this.startDate = startDate
-        this.source = source
-        this.shifts = shifts
-        if (rebuild) {
+        this.startDate = snapshot.startDate
+        this.source = snapshot.source
+        this.shifts = snapshot.shifts
+
+        val host = container ?: return
+        val layoutKey = WeekPageLayoutKey.from(table, displayTimes.size)
+        val contentKey = WeekPageContentKey.from(
+            table = table,
+            times = displayTimes,
+            week = week,
+            startDate = snapshot.startDate,
+            source = snapshot.source,
+            shifts = snapshot.shifts,
+            scheduleBlankArea = Prefs.get(requireContext()).scheduleBlankArea,
+        )
+        val needsLayoutRebuild = pageRoot == null || renderedLayoutKey != layoutKey
+        if (needsLayoutRebuild) {
+            // 页面仍存活时可能因为节数、列数或行高变化而重建；先保存用户当前滚动位置。
+            savedScrollY = scrollView?.scrollY ?: savedScrollY
             build(table, displayTimes)
-            container?.let { host ->
-                host.removeAllViews()
-                pageRoot?.let { root ->
-                    host.addView(root, FrameLayout.LayoutParams(-1, -1))
-                }
+            host.removeAllViews()
+            pageRoot?.let { root ->
+                host.addView(root, FrameLayout.LayoutParams(-1, -1))
             }
+            renderedLayoutKey = layoutKey
+            // 新骨架尚未展示任何课程内容，必须执行一次完整内容刷新。
+            renderedContentKey = null
+            restoreScrollPosition()
         }
+        if (!needsLayoutRebuild && renderedContentKey == contentKey) return
         refresh()
+        renderedContentKey = contentKey
+    }
+
+    /** 从当前 Activity 宿主读取快照；数据尚未加载时保持空容器，等待宿主后续主动推送。 */
+    private fun pullSnapshotFromHost() {
+        (activity as? WeekPageSnapshotProvider)?.currentWeekPageSnapshot()?.let(::update)
+    }
+
+    /** 页面骨架重建后在下一帧恢复此前滚动位置，并防止旧 View 的延迟任务影响新页面。 */
+    private fun restoreScrollPosition() {
+        val target = scrollView ?: return
+        val targetScrollY = savedScrollY
+        target.post {
+            if (scrollView === target) target.scrollTo(0, targetScrollY)
+        }
     }
 
     // ================= id 映射 =================
@@ -436,6 +527,7 @@ class WeekPageFragment : Fragment() {
                 )
             )
         }
+        scrollView = scroll
         root.addView(scroll, ConstraintLayout.LayoutParams(0, 0))
         pageRoot = root
 
@@ -747,26 +839,29 @@ class WeekPageFragment : Fragment() {
             }
         }
 
+        // 课程数据先按星期与调课目标日期建立索引，避免七个日期列反复扫描完整列表。
+        val coursesByDay = source.groupBy { (_, detail) -> detail.day }
+        val outgoingShiftDates = shifts.mapTo(mutableSetOf()) { shift -> shift.fromDate }
+        val incomingShiftsByDate = shifts.groupBy { shift -> shift.toDate }
+
         // 课程卡
         panelViews.forEach { it.removeAllViews() }
         days.forEachIndexed { panelIndex, date ->
             if (date == null) return@forEachIndexed
             val panel = panelViews.getOrNull(panelIndex) ?: return@forEachIndexed
-            val hasOutgoingShift = shifts.any { it.fromDate == date.toString() }
+            val dateKey = date.toString()
+            val hasOutgoingShift = dateKey in outgoingShiftDates
 
             val regularCourses = if (hasOutgoingShift) {
                 emptyList()
             } else {
-                source.filter { (_, detail) -> detail.day == date.dayOfWeek.value }
+                coursesByDay[date.dayOfWeek.value].orEmpty()
             }
-            val shiftedCourses = shifts.filter { it.toDate == date.toString() }.flatMap { shift ->
+            val shiftedCourses = incomingShiftsByDate[dateKey].orEmpty().flatMap { shift ->
                 val originalDate = runCatching { LocalDate.parse(shift.fromDate) }.getOrNull()
                     ?: return@flatMap emptyList()
-                source.filter { (_, detail) ->
-                    detail.day == originalDate.dayOfWeek.value && detailActiveOnDate(
-                        detail,
-                        originalDate
-                    )
+                coursesByDay[originalDate.dayOfWeek.value].orEmpty().filter { (_, detail) ->
+                    detailActiveOnDate(detail, originalDate)
                 }
             }
             val currentWeekCourses = regularCourses
@@ -1343,17 +1438,10 @@ class WeekPageFragment : Fragment() {
 
     private fun withAlpha(color: Int, alpha: Int): Int = (alpha shl 24) or (color and 0x00FFFFFF)
 
-    /** 全周页共享的数据快照（ScheduleActivity 推送、各页 onResume 拉取） */
-    data class Snapshot(
-        val table: TableEntity,
-        val times: List<TimeDetailEntity>,
-        val currentWeek: Int,
-        val startDate: LocalDate,
-        val source: List<Pair<CourseEntity, CourseDetailEntity>>,
-        val shifts: List<ScheduleShiftEntity> = emptyList(),
-    )
-
     companion object {
+        /** Fragment 状态中保存周页面纵向滚动位置的键。 */
+        private const val STATE_SCROLL_Y = "week_page_scroll_y"
+
         /** 当日日号高亮色块的固定视觉尺寸。 */
         private const val TODAY_DATE_SIZE_DP = 20f
 
@@ -1380,8 +1468,6 @@ class WeekPageFragment : Fragment() {
             R.string.weekday_char_4, R.string.weekday_char_5, R.string.weekday_char_6,
             R.string.weekday_char_7,
         )
-
-        var latest: Snapshot? = null
 
         fun newInstance(week: Int): WeekPageFragment = WeekPageFragment().apply {
             arguments = Bundle().apply { putInt("week", week) }

@@ -3,7 +3,6 @@ package com.openwakeup.schedule.feature.schedule
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Outline
-import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -21,6 +20,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.doOnLayout
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -41,6 +41,7 @@ import com.openwakeup.schedule.core.database.entity.TableEntity
 import com.openwakeup.schedule.core.database.entity.TimeDetailEntity
 import com.openwakeup.schedule.core.designsystem.component.CascadeMenu
 import com.openwakeup.schedule.core.format.AppDateFormatter
+import com.openwakeup.schedule.core.image.TableBackgroundImageStore
 import com.openwakeup.schedule.core.util.DateUtils
 import com.openwakeup.schedule.core.validation.CourseRangePolicy
 import com.openwakeup.schedule.data.schedule.ScheduleRepository
@@ -63,6 +64,7 @@ import com.openwakeup.schedule.feature.settings.timetable.TimeSettingsActivity
 import com.openwakeup.schedule.feature.settings.widget.WidgetSettingsActivity
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -88,6 +90,15 @@ class ScheduleActivity : AppCompatActivity(), WeekPageSnapshotProvider {
 
     /** 当前宿主自己的周页面快照；只随 Activity 生命周期存在，不再跨页面使用静态字段共享。 */
     private var weekPageSnapshot: WeekPageSnapshot? = null
+
+    /** 当前背景图解码任务；切表或 Activity 销毁时取消，防止无效图片继续占用 CPU。 */
+    private var backgroundLoadJob: Job? = null
+
+    /** 背景请求递增序号，用于阻止较慢的旧任务覆盖用户刚切换的新背景。 */
+    private var backgroundRequestId = 0L
+
+    /** 已显示图片的路径、目标尺寸与文件版本；完全一致时不重复解码。 */
+    private var displayedBackgroundKey: TableBackgroundImageStore.RequestKey? = null
 
     /** 为新建、恢复或重新显示的周页面提供最新主页数据。 */
     override fun currentWeekPageSnapshot(): WeekPageSnapshot? = weekPageSnapshot
@@ -704,33 +715,82 @@ class ScheduleActivity : AppCompatActivity(), WeekPageSnapshotProvider {
         page.onQuickAddRequest = { draft -> launchQuickAdd(draft) }
     }
 
-    /** 背景：色值直接铺色，图片 uri 走 BitmapFactory 解码（避免 Coil UI 依赖） */
+    /**
+     * 应用课表背景。
+     *
+     * 未配置自定义背景时，暗色模式使用主题表面色，浅色模式使用默认渐变；用户明确配置的
+     * 纯色或图片在两种主题下都会生效。图片等待背景 View 完成布局后，按真实显示尺寸异步
+     * 采样。每次调用都会使旧请求失效，切换课表时不会出现上一张表的慢速解码结果覆盖新背景。
+     *
+     * @param background 空串表示默认渐变，颜色以 `#` 开头，其他值为本地路径或图片 URI
+     */
     private fun applyBackground(background: String) {
-        ScheduleThemeColors.darkTableBackgroundColor(this)?.let { darkBackground ->
-            // 夜间模式强制使用 M3E 深色表面，避免浅色自定义图片或颜色让主表格重新变亮。
+        val requestId = ++backgroundRequestId
+        backgroundLoadJob?.cancel()
+        backgroundLoadJob = null
+        if (background.isBlank()) {
+            displayedBackgroundKey = null
             ui.ivBg.setImageDrawable(null)
-            ui.ivBg.setBackgroundColor(darkBackground)
-            return
-        }
-        if (background.isBlank() || background.startsWith("#")) {
-            ui.ivBg.setImageDrawable(null)
-            if (background.startsWith("#")) {
-                ui.ivBg.setBackgroundColor(Color.parseColor(background))
+            val darkBackground = ScheduleThemeColors.darkTableBackgroundColor(this)
+            if (darkBackground != null) {
+                // 只有默认背景跟随夜间主题；用户主动选择的图片或纯色必须保持可见。
+                ui.ivBg.setBackgroundColor(darkBackground)
             } else {
                 ui.ivBg.setBackgroundResource(R.drawable.main_gradient_background)
             }
             return
         }
-        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val bmp = runCatching {
-                contentResolver.openInputStream(Uri.parse(background))?.use { input ->
-                    android.graphics.BitmapFactory.decodeStream(input)
+        if (background.startsWith("#")) {
+            displayedBackgroundKey = null
+            ui.ivBg.setImageDrawable(null)
+            runCatching { Color.parseColor(background) }
+                .onSuccess(ui.ivBg::setBackgroundColor)
+                .onFailure { ui.ivBg.setBackgroundResource(R.drawable.main_gradient_background) }
+            return
+        }
+
+        // doOnLayout 的回调参数类型固定为 View，提前保留强类型引用以调用 ImageView 专属 API。
+        val imageView = ui.ivBg
+        imageView.doOnLayout {
+            if (requestId != backgroundRequestId) return@doOnLayout
+            val request = TableBackgroundImageStore.requestKey(
+                source = background,
+                targetWidth = imageView.width,
+                targetHeight = imageView.height,
+            ) ?: return@doOnLayout
+            if (request == displayedBackgroundKey && imageView.drawable != null) return@doOnLayout
+
+            backgroundLoadJob = lifecycleScope.launch {
+                val bitmap = TableBackgroundImageStore.decodeForView(
+                    context = this@ScheduleActivity,
+                    request = request,
+                )
+                if (requestId != backgroundRequestId) {
+                    // 极少数解码器无法及时响应取消；结果已过期时立即释放，绝不挂到 ImageView。
+                    bitmap?.recycle()
+                    return@launch
                 }
-            }.getOrNull()
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                if (bmp != null) ui.ivBg.setImageBitmap(bmp)
+                if (bitmap == null) {
+                    displayedBackgroundKey = null
+                    imageView.setImageDrawable(null)
+                    imageView.setBackgroundResource(R.drawable.main_gradient_background)
+                } else {
+                    imageView.background = null
+                    imageView.setImageBitmap(bitmap)
+                    displayedBackgroundKey = request
+                }
+                backgroundLoadJob = null
             }
         }
+    }
+
+    /** Activity 销毁时使所有延迟布局回调和解码结果失效。 */
+    override fun onDestroy() {
+        backgroundRequestId++
+        backgroundLoadJob?.cancel()
+        backgroundLoadJob = null
+        displayedBackgroundKey = null
+        super.onDestroy()
     }
 
     /** 底部浮窗课表项拖拽排序（横向，与多课表管理共用 tableOrder） */

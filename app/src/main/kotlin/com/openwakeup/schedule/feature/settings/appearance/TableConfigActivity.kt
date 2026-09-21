@@ -1,5 +1,6 @@
 package com.openwakeup.schedule.feature.settings.appearance
 
+import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.text.InputType
 import androidx.activity.result.PickVisualMediaRequest
@@ -9,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.doOnLayout
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DefaultItemAnimator
@@ -23,6 +25,7 @@ import com.openwakeup.schedule.core.database.entity.CourseEntity
 import com.openwakeup.schedule.core.database.entity.TableEntity
 import com.openwakeup.schedule.core.database.entity.TimeDetailEntity
 import com.openwakeup.schedule.core.designsystem.component.colorpicker.OpacitySliderDialog
+import com.openwakeup.schedule.core.image.TableBackgroundImageStore
 import com.openwakeup.schedule.core.util.DateUtils
 import com.openwakeup.schedule.core.validation.CourseRangePolicy
 import com.openwakeup.schedule.data.schedule.ScheduleRepository
@@ -41,6 +44,7 @@ import com.openwakeup.schedule.feature.settings.SettingsRestoreDialog
 import com.openwakeup.schedule.feature.settings.SwitchItem
 import com.openwakeup.schedule.feature.settings.VerticalItem
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -65,6 +69,15 @@ class TableConfigActivity : AppCompatActivity(), WeekPageSnapshotProvider {
     /** 外观预览专用快照，避免与主课表页面通过进程级静态字段互相覆盖。 */
     private var previewSnapshot: WeekPageSnapshot? = null
 
+    /** 外观预览当前正在执行的背景图解码任务。 */
+    private var previewBackgroundJob: Job? = null
+
+    /** 预览背景请求递增序号，保证快速连续选择图片时只采用最后一次结果。 */
+    private var previewBackgroundRequestId = 0L
+
+    /** 已显示预览图的请求身份；修改其他外观设置时避免重复解码同一文件。 */
+    private var displayedPreviewBackgroundKey: TableBackgroundImageStore.RequestKey? = null
+
     /** 为系统恢复或刚创建 View 的预览 Fragment 提供本页面自己的最新数据。 */
     override fun currentWeekPageSnapshot(): WeekPageSnapshot? = previewSnapshot
 
@@ -73,13 +86,12 @@ class TableConfigActivity : AppCompatActivity(), WeekPageSnapshotProvider {
             val t = table ?: return@registerForActivityResult
             if (uri == null) return@registerForActivityResult
             lifecycleScope.launch {
-                runCatching {
-                    val file = java.io.File(filesDir, "table_bg_${t.id}.jpg")
-                    contentResolver.openInputStream(uri)?.use { input ->
-                        file.outputStream().use { output -> input.copyTo(output) }
-                    }
-                    updateTable { it.copy(background = file.absolutePath) }
-                }
+                val storedPath = TableBackgroundImageStore.importOriginal(
+                    context = this@TableConfigActivity,
+                    sourceUri = uri,
+                    tableId = t.id,
+                ) ?: return@launch
+                updateTable { current -> current.copy(background = storedPath) }
             }
         }
 
@@ -157,42 +169,108 @@ class TableConfigActivity : AppCompatActivity(), WeekPageSnapshotProvider {
         }
     }
 
-    /** 预览背景 = 默认渐变图 / 纯色 / 本地图片 */
+    /**
+     * 渲染外观预览背景。
+     *
+     * 未配置自定义背景时，暗色模式使用主题表面色，浅色模式使用默认渐变；用户明确配置的
+     * 纯色或图片在两种主题下都会生效。图片只有在预览容器完成布局后才会按实际尺寸解码；
+     * 路径、尺寸和文件版本均未变化时直接复用现有 Drawable，避免重复读取同一张原图。
+     */
     private fun renderPreviewBackground() {
         val t = table ?: return
-        ScheduleThemeColors.darkTableBackgroundColor(this)?.let { darkBackground ->
-            // 预览与主课表共用同一夜间 surface token，主题切换后不再保留浅色图片或渐变。
-            binding.previewContainer.setBackgroundColor(darkBackground)
-            return
-        }
+        val requestId = ++previewBackgroundRequestId
+        previewBackgroundJob?.cancel()
+        previewBackgroundJob = null
         val bg = t.background
         when {
-            bg.isBlank() ->
-                binding.previewContainer.setBackgroundResource(R.drawable.main_gradient_background)
+            bg.isBlank() -> {
+                displayedPreviewBackgroundKey = null
+                val darkBackground = ScheduleThemeColors.darkTableBackgroundColor(this)
+                if (darkBackground != null) {
+                    // 预览与主页规则一致：只有默认背景跟随夜间主题，自定义背景始终生效。
+                    binding.previewContainer.setBackgroundColor(darkBackground)
+                } else {
+                    binding.previewContainer.setBackgroundResource(R.drawable.main_gradient_background)
+                }
+            }
 
-            bg.startsWith("#") -> runCatching {
-                binding.previewContainer.setBackgroundColor(android.graphics.Color.parseColor(bg))
-            }.onFailure {
-                binding.previewContainer.setBackgroundResource(R.drawable.main_gradient_background)
+            bg.startsWith("#") -> {
+                displayedPreviewBackgroundKey = null
+                runCatching { android.graphics.Color.parseColor(bg) }
+                    .onSuccess(binding.previewContainer::setBackgroundColor)
+                    .onFailure {
+                        binding.previewContainer.setBackgroundResource(R.drawable.main_gradient_background)
+                    }
             }
 
             else -> {
-                val bitmap = android.graphics.BitmapFactory.decodeFile(bg)
-                if (bitmap != null) {
-                    binding.previewContainer.background =
-                        android.graphics.drawable.BitmapDrawable(resources, bitmap)
-                } else {
-                    binding.previewContainer.setBackgroundResource(R.drawable.main_gradient_background)
+                binding.previewContainer.doOnLayout { preview ->
+                    if (requestId != previewBackgroundRequestId) return@doOnLayout
+                    val request = TableBackgroundImageStore.requestKey(
+                        source = bg,
+                        targetWidth = preview.width,
+                        targetHeight = preview.height,
+                    ) ?: return@doOnLayout
+                    if (
+                        request == displayedPreviewBackgroundKey &&
+                        preview.background is BitmapDrawable
+                    ) {
+                        return@doOnLayout
+                    }
+
+                    previewBackgroundJob = lifecycleScope.launch {
+                        val bitmap = TableBackgroundImageStore.decodeForView(
+                            context = this@TableConfigActivity,
+                            request = request,
+                        )
+                        if (requestId != previewBackgroundRequestId) {
+                            bitmap?.recycle()
+                            return@launch
+                        }
+                        if (bitmap == null) {
+                            displayedPreviewBackgroundKey = null
+                            preview.setBackgroundResource(R.drawable.main_gradient_background)
+                        } else {
+                            preview.background = BitmapDrawable(resources, bitmap)
+                            displayedPreviewBackgroundKey = request
+                        }
+                        previewBackgroundJob = null
+                    }
                 }
             }
         }
     }
 
+    /** Activity 销毁时取消预览解码，并解除容器到 BitmapDrawable 的引用。 */
+    override fun onDestroy() {
+        previewBackgroundRequestId++
+        previewBackgroundJob?.cancel()
+        previewBackgroundJob = null
+        displayedPreviewBackgroundKey = null
+        if (::binding.isInitialized) binding.previewContainer.background = null
+        super.onDestroy()
+    }
+
+    /**
+     * 更新当前课表外观并刷新预览。
+     *
+     * 背景字段发生替换时，先确保新值成功写入数据库，再清理旧的应用受管图片。清理失败不会
+     * 回滚已经保存的外观设置，且存储层会拒绝删除外部 URI、任意路径和其他课表的图片。
+     *
+     * @param transform 基于更新前课表生成新配置的转换函数
+     */
     private fun updateTable(transform: (TableEntity) -> TableEntity) {
-        val t = table ?: return
+        val previous = table ?: return
         lifecycleScope.launch {
-            table = transform(t)
-            repo.updateTable(table!!)
+            val updated = transform(previous)
+            table = updated
+            repo.updateTable(updated)
+            TableBackgroundImageStore.deleteReplacedManagedImage(
+                context = this@TableConfigActivity,
+                oldSource = previous.background,
+                newSource = updated.background,
+                tableId = previous.id,
+            )
             render()
             pushPreview()
             renderPreviewBackground()

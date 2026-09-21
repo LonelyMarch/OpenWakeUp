@@ -3,6 +3,7 @@ package com.openwakeup.parser.web
 import com.openwakeup.parser.*
 import com.openwakeup.parser.utils.JsonUtils
 import com.openwakeup.parser.utils.WeekUtils
+import java.util.concurrent.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -16,7 +17,7 @@ object YguParser : Parser {
      * 选择第一个可用响应，不读取或依赖 App 层的课程字段判断。
      */
     override fun parse(input: ParserInput): List<CoursePreview> = try {
-        var lastFailure: Throwable? = null
+        var lastFailure: Exception? = null
         input.allTexts.forEach { text ->
             try {
                 val root = Json.parseToJsonElement(text).jsonObject
@@ -31,7 +32,11 @@ object YguParser : Parser {
                 }
                 if (result.isNotEmpty()) return result
                 lastFailure = ParserException.empty("阳光学院候选学期课表为空")
-            } catch (error: Throwable) {
+            } catch (error: CancellationException) {
+                // 取消是协程的控制流信号，不能当作候选响应解析失败后继续尝试。
+                throw error
+            } catch (error: Exception) {
+                // 只记录可恢复的输入或解析异常，避免吞掉 OutOfMemoryError 等 JVM 严重错误。
                 lastFailure = error
             }
         }

@@ -6,6 +6,7 @@ import com.openwakeup.parser.ParserException
 import com.openwakeup.parser.ParserInput
 import com.openwakeup.parser.utils.JsonUtils
 import com.openwakeup.parser.utils.WeekUtils
+import java.util.concurrent.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -20,12 +21,16 @@ object LoginChaoxingParser : Parser {
      */
     override fun parse(input: ParserInput): List<CoursePreview> {
         val sources = input.allTexts
-        val errors = mutableListOf<Throwable>()
+        val errors = mutableListOf<Exception>()
         sources.forEach { source ->
             try {
                 val courses = parseSource(source)
                 if (courses.isNotEmpty()) return courses
-            } catch (error: Throwable) {
+            } catch (error: CancellationException) {
+                // 取消是协程的控制流信号，不能记录为主、备响应的普通解析失败。
+                throw error
+            } catch (error: Exception) {
+                // 主响应解析失败后允许尝试备用响应，但不捕获 JVM 级 Error。
                 errors += error
             }
         }

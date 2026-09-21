@@ -544,8 +544,11 @@ class WeekPageFragment : Fragment() {
     }
 
     /**
-     * 布局约束：节次列:日列 = 0.64:1.0（共 columnCount 列），
-     * 以父宽百分比确定性求解（ConstraintLayout 联立百分比求解在独立构建时不可复现，比例结果等价）。
+     * 布局约束：节次列保持窄列比例，日列在剩余空间内等分。
+     *
+     * 日列不能同时使用“父宽百分比”和额外的固定列间距：七天全显示时，两者相加会
+     * 超出父容器，导致周日列右缘被裁切。因此这里只用 guideline 固定节次列右缘，
+     * 再让各日列以等权重链式布局分配可用宽度，并为最后一列保留稳定的右侧空白。
      */
     private fun applyConstraints(
         root: ConstraintLayout,
@@ -558,9 +561,10 @@ class WeekPageFragment : Fragment() {
         dp: (Float) -> Int
     ) {
         val unit = 0.64f + (columnCount - 1)
-        // 留 3% 余量给列间 1dp 与末列 8dp 边距，防止末列被压缩
+        // 沿用原有的节次列视觉宽度；日列改由约束链填满剩余空间。
         val nodePct = 0.64f / unit * 0.97f
-        val panelPct = 1f / unit * 0.97f
+        val scheduleStartGap = dp(SCHEDULE_START_GAP_DP)
+        val scheduleEndInset = dp(SCHEDULE_END_INSET_DP)
         val cs = ConstraintSet()
         cs.clone(content)
 
@@ -625,26 +629,39 @@ class WeekPageFragment : Fragment() {
         if (gridId != View.NO_ID) {
             cs.connect(gridId, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP, 0)
             cs.connect(gridId, ConstraintSet.BOTTOM, lastNodeId, ConstraintSet.BOTTOM, 0)
-            cs.connect(gridId, ConstraintSet.START, nodeGuideId, ConstraintSet.START, 0)
+            cs.connect(
+                gridId,
+                ConstraintSet.START,
+                nodeGuideId,
+                ConstraintSet.START,
+                scheduleStartGap,
+            )
             cs.connect(
                 gridId,
                 ConstraintSet.END,
                 ConstraintSet.PARENT_ID,
                 ConstraintSet.END,
-                if (columnCount < 8) dp(8f) else dp(4f)
+                scheduleEndInset
             )
             cs.constrainWidth(gridId, ConstraintSet.MATCH_CONSTRAINT)
             cs.constrainHeight(gridId, ConstraintSet.MATCH_CONSTRAINT)
         }
-        // 每日列：百分比宽 + 1dp 间距链
+        // 每日列：等权重宽度 + 列间距；固定右边距会先从可用宽度中扣除。
         for (i in 0 until columnCount - 1) {
             val pid = panelId(i)
             cs.constrainWidth(pid, ConstraintSet.MATCH_CONSTRAINT)
+            cs.setHorizontalWeight(pid, 1f)
             cs.constrainHeight(pid, ConstraintSet.MATCH_CONSTRAINT)
             cs.connect(pid, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP, 0)
             cs.connect(pid, ConstraintSet.BOTTOM, lastNodeId, ConstraintSet.BOTTOM, 0)
             if (i == 0) {
-                cs.connect(pid, ConstraintSet.START, nodeGuideId, ConstraintSet.START, 0)
+                cs.connect(
+                    pid,
+                    ConstraintSet.START,
+                    nodeGuideId,
+                    ConstraintSet.START,
+                    scheduleStartGap,
+                )
             } else {
                 cs.connect(pid, ConstraintSet.START, panelId(i - 1), ConstraintSet.END, dp(1f))
             }
@@ -654,23 +671,28 @@ class WeekPageFragment : Fragment() {
                     ConstraintSet.END,
                     ConstraintSet.PARENT_ID,
                     ConstraintSet.END,
-                    if (columnCount < 8) dp(8f) else dp(4f)
+                    scheduleEndInset
                 )
             } else {
                 cs.connect(pid, ConstraintSet.END, panelId(i + 1), ConstraintSet.START, dp(1f))
             }
-            cs.constrainPercentWidth(pid, panelPct)
         }
         // 快速加课草稿层：与日列区域同界（首列左缘 → 末列右缘），绘制顺序在日列之上
         cs.constrainWidth(overlayItemId, ConstraintSet.MATCH_CONSTRAINT)
         cs.constrainHeight(overlayItemId, ConstraintSet.MATCH_CONSTRAINT)
-        cs.connect(overlayItemId, ConstraintSet.START, nodeGuideId, ConstraintSet.START, 0)
+        cs.connect(
+            overlayItemId,
+            ConstraintSet.START,
+            nodeGuideId,
+            ConstraintSet.START,
+            scheduleStartGap,
+        )
         cs.connect(
             overlayItemId,
             ConstraintSet.END,
             ConstraintSet.PARENT_ID,
             ConstraintSet.END,
-            if (columnCount < 8) dp(8f) else dp(4f)
+            scheduleEndInset
         )
         cs.connect(overlayItemId, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP, 0)
         cs.connect(overlayItemId, ConstraintSet.BOTTOM, lastNodeId, ConstraintSet.BOTTOM, 0)
@@ -698,7 +720,13 @@ class WeekPageFragment : Fragment() {
                 rs.connect(tid, ConstraintSet.END, headerGuideId, ConstraintSet.START, 0)
             } else {
                 if (i == 1) {
-                    rs.connect(tid, ConstraintSet.START, headerGuideId, ConstraintSet.START, 0)
+                    rs.connect(
+                        tid,
+                        ConstraintSet.START,
+                        headerGuideId,
+                        ConstraintSet.START,
+                        scheduleStartGap,
+                    )
                 } else {
                     rs.connect(tid, ConstraintSet.START, titleId(i - 1), ConstraintSet.END, dp(1f))
                 }
@@ -708,12 +736,13 @@ class WeekPageFragment : Fragment() {
                         ConstraintSet.END,
                         ConstraintSet.PARENT_ID,
                         ConstraintSet.END,
-                        if (columnCount < 8) dp(8f) else dp(4f)
+                        scheduleEndInset
                     )
                 } else {
                     rs.connect(tid, ConstraintSet.END, titleId(i + 1), ConstraintSet.START, dp(1f))
                 }
-                rs.constrainPercentWidth(tid, panelPct)
+                // 表头与下方课程列使用相同等权重链，保证星期和日期严格对齐。
+                rs.setHorizontalWeight(tid, 1f)
             }
         }
         val scrollId = R.id.anko_sv_schedule
@@ -1459,6 +1488,12 @@ class WeekPageFragment : Fragment() {
 
         /** 普通课程卡中“非本周”标签的初始最小字号，实际过窄时仍会继续自适应缩小。 */
         private const val NON_WEEK_LABEL_MIN_SIZE_SP = 7
+
+        /** 课程区与屏幕右缘的留白，为原 8dp 留白的 75%。 */
+        private const val SCHEDULE_END_INSET_DP = 6f
+
+        /** 节次列与周一列的微小间距，为修改前右侧 8dp 留白的 12.5%。 */
+        private const val SCHEDULE_START_GAP_DP = 1f
 
         /** 冲突格中“非本周”标签使用原生自动字号时允许的最小字号。 */
         private const val NON_WEEK_LABEL_AUTO_SIZE_MIN_SP = 5

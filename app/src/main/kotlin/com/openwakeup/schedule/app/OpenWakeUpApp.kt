@@ -9,7 +9,6 @@ import com.openwakeup.schedule.R
 import com.openwakeup.schedule.core.data.Prefs
 import com.openwakeup.schedule.core.designsystem.theme.AppThemeController
 import com.openwakeup.schedule.core.format.AppLocaleResolver
-import com.openwakeup.schedule.platform.appwidget.WidgetRefreshScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -51,8 +50,7 @@ class OpenWakeUpApp : Application() {
         }
         manager?.createNotificationChannel(channel)
 
-        // 安排次日零点刷新；系统日期广播之外再增加一层跨天可靠性保障。
-        WidgetRefreshScheduler.scheduleNextDateRefresh(this)
+        // 小组件闹钟由真实桌面实例生命周期维护；应用普通冷启动不再无条件登记后台任务。
     }
 
     companion object {

@@ -42,7 +42,7 @@ import com.openwakeup.schedule.feature.settings.SettingsRestoreDialog
 import com.openwakeup.schedule.feature.settings.SwitchItem
 import com.openwakeup.schedule.feature.settings.VerticalItem
 import com.openwakeup.schedule.feature.settings.appearance.TableConfigActivity
-import com.openwakeup.schedule.platform.appwidget.WidgetRefreshScheduler
+import com.openwakeup.schedule.platform.appwidget.WidgetUpdateCoordinator
 import com.openwakeup.schedule.platform.reminder.ReminderScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -253,17 +253,17 @@ class SettingsActivity : AppCompatActivity() {
                 prefs.themeMode = AppDefaults.Global.THEME_MODE
                 AppThemeController.apply(AppDefaults.Global.THEME_MODE)
                 // 主题变化后立即让桌面小部件重新读取对应主题的纯色背景与标题颜色。
-                WidgetRefreshScheduler.refreshAll(this)
+                refreshWidgets()
             }
 
-            R.string.setting_app_language ->
+            R.string.setting_app_language -> {
                 AppLocaleResolver.persistAndApply(this, AppDefaults.Global.APP_LOCALE)
+                refreshWidgets()
+            }
 
             R.string.setting_date_format -> {
                 prefs.dateFormat = AppDefaults.Global.DATE_FORMAT
-                lifecycleScope.launch(Dispatchers.IO) {
-                    WidgetRefreshScheduler.refreshAll(this@SettingsActivity)
-                }
+                refreshWidgets()
                 render()
             }
 
@@ -293,7 +293,7 @@ class SettingsActivity : AppCompatActivity() {
                 prefs.themeMode = selected
                 AppThemeController.apply(selected)
                 // Provider 收到广播时会按新主题读取对应颜色；图片背景的标题颜色保持固定值。
-                WidgetRefreshScheduler.refreshAll(this)
+                refreshWidgets()
                 render()
                 dialog.dismiss()
             }
@@ -315,6 +315,7 @@ class SettingsActivity : AppCompatActivity() {
             .setTitle(R.string.setting_app_language)
             .setSingleChoiceItems(labels, checked) { dialog, which ->
                 AppLocaleResolver.persistAndApply(this, locales[which])
+                refreshWidgets()
                 render()
                 dialog.dismiss()
             }
@@ -338,9 +339,7 @@ class SettingsActivity : AppCompatActivity() {
                 prefs.dateFormat = AppDatePattern.ALL[which]
                 render()
                 // 日期格式变化需要同步到所有已添加的桌面小组件。
-                lifecycleScope.launch(Dispatchers.IO) {
-                    WidgetRefreshScheduler.refreshAll(this@SettingsActivity)
-                }
+                refreshWidgets()
                 dialog.dismiss()
             }
             .setNegativeButton(R.string.cancel, null)
@@ -380,6 +379,12 @@ class SettingsActivity : AppCompatActivity() {
             ReminderScheduler.rearrange(this@SettingsActivity)
         }
         render()
+    }
+
+    /** 只刷新真实存在的桌面小组件；没有实例时不会发送广播或读取数据库。 */
+    private fun refreshWidgets() {
+        // 主题和语言切换可能立即重建 Activity，直接发送轻量广播可避免 lifecycleScope 被取消。
+        WidgetUpdateCoordinator.refreshAllInstalled(applicationContext)
     }
 
     /** 打开应用详情页，供用户配置后台运行与自启权限。 */

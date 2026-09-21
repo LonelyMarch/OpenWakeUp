@@ -2,7 +2,6 @@ package com.openwakeup.schedule.platform.appwidget
 
 import android.app.AlarmManager
 import android.app.PendingIntent
-import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import com.openwakeup.schedule.platform.reminder.ReminderReceiver
@@ -10,80 +9,154 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /**
- * 四类桌面小部件的跨天刷新调度器。
+ * 桌面小组件一次性刷新闹钟调度器。
  *
- * 系统 `DATE_CHANGED` 广播是第一层保障；次日零点后的精确闹钟是第二层保障，避免部分厂商
- * 在省电模式下延迟日期广播。每次触发后都会安排下一次刷新。
+ * 小组件只需要在跨日与今天课程结束时更新，不应使用会唤醒设备的精确闹钟。这里统一使用
+ * [AlarmManager.RTC] 和非精确窗口；系统处于休眠状态时允许延迟到下次唤醒，再由日期广播提供
+ * 额外保障。课前提醒仍由独立的 ReminderScheduler 使用精确唤醒闹钟。
  */
 object WidgetRefreshScheduler {
 
-    /** 次日零点刷新广播动作。 */
+    /** 次日日期刷新广播动作。 */
     const val ACTION_DATE_REFRESH = "com.openwakeup.schedule.widget.DATE_REFRESH"
 
-    private const val REQUEST_DATE_REFRESH = 0x7301
+    /** 今天下一节课程结束后的进度刷新动作。 */
+    const val ACTION_COURSE_PROGRESS_REFRESH =
+        "com.openwakeup.schedule.widget.COURSE_PROGRESS_REFRESH"
 
-    /** 根据真实实例决定保留还是取消当前阶段的跨日刷新。 */
-    fun reconcileDateRefresh(
+    private const val REQUEST_DATE_REFRESH = 0x7301
+    private const val REQUEST_COURSE_PROGRESS_REFRESH = 0x7302
+    private const val DATE_DELAY_SECONDS = 2L
+    private const val DATE_WINDOW_MILLIS = 5 * 60 * 1_000L
+    private const val COURSE_WINDOW_MILLIS = 60 * 1_000L
+
+    /**
+     * 根据真实实例重新建立所需闹钟。
+     *
+     * @param context 任意 Context
+     * @param snapshot 已安装小组件的实例快照
+     */
+    fun reconcileScheduling(
         context: Context,
         snapshot: WidgetInstanceRegistry.Snapshot = WidgetInstanceRegistry.snapshot(context),
     ) {
-        if (snapshot.hasAny) scheduleNextDateRefresh(context) else cancelDateRefresh(context)
-    }
-
-    /** 刷新所有已添加的小部件，并重新安排下一个自然日刷新。 */
-    fun refreshAndSchedule(context: Context) {
-        refreshAll(context)
+        if (!snapshot.hasAny) {
+            cancelAll(context)
+            return
+        }
         scheduleNextDateRefresh(context)
-    }
-
-    /** 向四个 Provider 发送显式更新广播。 */
-    fun refreshAll(context: Context) {
-        val appContext = context.applicationContext
-        listOf(
-            ScheduleWidgetProvider::class.java,
-            TodayCourseWidgetProvider::class.java,
-            RecentCourseWidgetProvider::class.java,
-            TodayWidgetProvider::class.java,
-        ).forEach { provider ->
-            appContext.sendBroadcast(
-                Intent(appContext, provider).setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE),
-            )
+        if (snapshot.hasCourseProgressWidgets) {
+            scheduleNextCourseProgressRefresh(context)
+        } else {
+            cancelCourseProgressRefresh(context)
         }
     }
 
-    /** 安排次日零点后两秒的兜底刷新。 */
+    /** 安排次日零点后两秒的非唤醒兜底刷新。 */
     fun scheduleNextDateRefresh(context: Context) {
         val appContext = context.applicationContext
         val alarm = appContext.getSystemService(AlarmManager::class.java) ?: return
+        // 新 Receiver 与旧版本 PendingIntent 的组件不同，先取消旧闹钟避免升级后保留两条链路。
+        cancelLegacyDateRefresh(appContext, alarm)
         val triggerAt = LocalDate.now()
             .plusDays(1)
             .atStartOfDay()
-            .plusSeconds(2)
+            .plusSeconds(DATE_DELAY_SECONDS)
             .atZone(ZoneId.systemDefault())
             .toInstant()
             .toEpochMilli()
-        val pending = PendingIntent.getBroadcast(
-            appContext,
-            REQUEST_DATE_REFRESH,
-            Intent(appContext, ReminderReceiver::class.java).setAction(ACTION_DATE_REFRESH),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        alarm.setWindow(
+            AlarmManager.RTC,
+            triggerAt,
+            DATE_WINDOW_MILLIS,
+            pendingIntent(appContext, REQUEST_DATE_REFRESH, ACTION_DATE_REFRESH),
         )
-        // minSdk 为 33；精确闹钟未获授权时必须退化，否则调用会抛出 SecurityException。
-        if (alarm.canScheduleExactAlarms()) {
-            alarm.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
-        } else {
-            alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
-        }
     }
 
-    /** 没有任何桌面实例时取消旧版本可能遗留的跨日闹钟。 */
+    /** 根据固定/当前小组件课表安排今天下一节课程结束后的非唤醒刷新。 */
+    private fun scheduleNextCourseProgressRefresh(context: Context) {
+        val appContext = context.applicationContext
+        val alarm = appContext.getSystemService(AlarmManager::class.java) ?: return
+        val triggerAt = WidgetRepository.nextCourseEndEpochMillis(appContext)
+        if (triggerAt == null) {
+            cancelCourseProgressRefresh(appContext)
+            return
+        }
+        alarm.setWindow(
+            AlarmManager.RTC,
+            triggerAt,
+            COURSE_WINDOW_MILLIS,
+            pendingIntent(
+                appContext,
+                REQUEST_COURSE_PROGRESS_REFRESH,
+                ACTION_COURSE_PROGRESS_REFRESH,
+            ),
+        )
+    }
+
+    /** 没有任何桌面实例时取消跨日闹钟，包括旧版本遗留的 PendingIntent。 */
     fun cancelDateRefresh(context: Context) {
         val appContext = context.applicationContext
         val alarm = appContext.getSystemService(AlarmManager::class.java) ?: return
-        val pending = PendingIntent.getBroadcast(
+        cancelExisting(
             appContext,
+            alarm,
             REQUEST_DATE_REFRESH,
-            Intent(appContext, ReminderReceiver::class.java).setAction(ACTION_DATE_REFRESH),
+            ACTION_DATE_REFRESH,
+        )
+        cancelLegacyDateRefresh(appContext, alarm)
+    }
+
+    /** 取消课程结束节点刷新。 */
+    private fun cancelCourseProgressRefresh(context: Context) {
+        val appContext = context.applicationContext
+        val alarm = appContext.getSystemService(AlarmManager::class.java) ?: return
+        cancelExisting(
+            appContext,
+            alarm,
+            REQUEST_COURSE_PROGRESS_REFRESH,
+            ACTION_COURSE_PROGRESS_REFRESH,
+        )
+    }
+
+    /** 取消全部小组件闹钟。 */
+    private fun cancelAll(context: Context) {
+        cancelDateRefresh(context)
+        cancelCourseProgressRefresh(context)
+    }
+
+    /** 构造由应用内部 Receiver 接收的稳定 PendingIntent。 */
+    private fun pendingIntent(context: Context, requestCode: Int, action: String): PendingIntent =
+        PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            Intent(context, WidgetRefreshReceiver::class.java).setAction(action),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    /** 只在 PendingIntent 已存在时取消，避免取消流程反向创建无意义对象。 */
+    private fun cancelExisting(
+        context: Context,
+        alarm: AlarmManager,
+        requestCode: Int,
+        action: String,
+    ) {
+        val pending = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            Intent(context, WidgetRefreshReceiver::class.java).setAction(action),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE,
+        ) ?: return
+        alarm.cancel(pending)
+        pending.cancel()
+    }
+
+    /** 取消升级前指向 ReminderReceiver 的同请求码跨日闹钟。 */
+    private fun cancelLegacyDateRefresh(context: Context, alarm: AlarmManager) {
+        val pending = PendingIntent.getBroadcast(
+            context,
+            REQUEST_DATE_REFRESH,
+            Intent(context, ReminderReceiver::class.java).setAction(ACTION_DATE_REFRESH),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE,
         ) ?: return
         alarm.cancel(pending)

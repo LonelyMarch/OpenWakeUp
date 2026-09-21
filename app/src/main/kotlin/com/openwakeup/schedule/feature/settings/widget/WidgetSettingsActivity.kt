@@ -64,6 +64,7 @@ import com.openwakeup.schedule.platform.appwidget.TodayWidgetProvider
 import com.openwakeup.schedule.platform.appwidget.WidgetCourseRowRenderer
 import com.openwakeup.schedule.platform.appwidget.WidgetImageStore
 import com.openwakeup.schedule.platform.appwidget.WidgetSnapshot
+import com.openwakeup.schedule.platform.appwidget.WidgetUpdateCoordinator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -335,11 +336,18 @@ class WidgetSettingsActivity : AppCompatActivity() {
         ),
     )
 
-    /** 刷新设置列表、预览与桌面小部件。 */
+    /** 只刷新设置列表和本页预览；打开页面本身不应触发桌面小组件读库与重绘。 */
     private fun render() {
         adapter.submit(buildItems())
         renderPreview()
-        notifyWidgetsChanged()
+    }
+
+    /** 用户成功保存小组件配置后，同步预览并刷新真实桌面实例与节点调度。 */
+    private fun renderAndNotifyWidgets() {
+        render()
+        lifecycleScope.launch(Dispatchers.IO) {
+            WidgetUpdateCoordinator.refreshAndReconcileScheduling(this@WidgetSettingsActivity)
+        }
     }
 
     /** 处理普通、颜色和数值设置项。 */
@@ -379,7 +387,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
                         R.string.setting_header_text_size -> prefs.widgetHeaderTextSize = value
                         R.string.setting_course_text_size -> prefs.widgetTextSize = value
                     }
-                    render()
+                    renderAndNotifyWidgets()
                 }
             }
         }
@@ -481,7 +489,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
             R.string.widget_text_compose -> prefs.widgetTextCompose = checked
             R.string.widget_stroke_compose -> prefs.widgetStrokeCompose = checked
         }
-        render()
+        renderAndNotifyWidgets()
     }
 
     /** 长按可配置的小部件设置项时，先展示居中确认弹窗。 */
@@ -556,7 +564,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
             R.string.widget_stroke_compose -> prefs.widgetStrokeCompose =
                 AppDefaults.Widget.STROKE_COMPOSE
         }
-        render()
+        renderAndNotifyWidgets()
     }
 
     /** 展示要由小部件固定显示的课表。 */
@@ -574,7 +582,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
                 .setSingleChoiceItems(labels.toTypedArray(), checked) { dialog, which ->
                     prefs.widgetTableId = if (which == 0) 0L else tables[which - 1].id
                     widgetTableName = labels[which]
-                    render()
+                    renderAndNotifyWidgets()
                     dialog.dismiss()
                 }
                 .setNegativeButton(R.string.cancel, null)
@@ -674,7 +682,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
             prefs.widgetEmptyTodayText = todayText
             prefs.widgetEmptyTomorrowText = tomorrowText
             prefs.widgetEmptyViewMode = WidgetEmptyViewMode.TEXT
-            render()
+            renderAndNotifyWidgets()
             dialog.dismiss()
         }
     }
@@ -704,7 +712,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
         ColorPickerDialog.newInstance(initial).apply {
             onSaved = { color ->
                 onPicked(color)
-                render()
+                renderAndNotifyWidgets()
             }
         }.show(supportFragmentManager, "widget-color-picker")
     }
@@ -725,7 +733,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
         OpacitySliderDialog.newInstance(item.name, initialValue, trackColor).apply {
             this.onSaved = { value ->
                 onSaved(value)
-                render()
+                renderAndNotifyWidgets()
             }
         }.show(supportFragmentManager, "widget-opacity-slider")
     }
@@ -805,7 +813,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 if (saved != null) {
                     onSaved(saved)
-                    render()
+                    renderAndNotifyWidgets()
                 } else {
                     Toast.makeText(
                         this@WidgetSettingsActivity,
@@ -1089,20 +1097,6 @@ class WidgetSettingsActivity : AppCompatActivity() {
                     )
                 }
             }
-        }
-    }
-
-    /** 通知所有已添加小部件重新读取全局配置。 */
-    private fun notifyWidgetsChanged() {
-        listOf(
-            ScheduleWidgetProvider::class.java,
-            TodayCourseWidgetProvider::class.java,
-            RecentCourseWidgetProvider::class.java,
-            TodayWidgetProvider::class.java,
-        ).forEach { provider ->
-            sendBroadcast(
-                Intent(this, provider).setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE),
-            )
         }
     }
 

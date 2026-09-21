@@ -28,18 +28,17 @@ object WidgetUpdateCoordinator {
     /**
      * 刷新全部真实实例，并核对当前阶段所需的跨日调度。
      *
-     * 第二笔提交会在此基础上继续加入课程结束节点调度；第一笔先保证实例生命周期与刷新入口
-     * 已经统一，且在没有小组件时不会保留跨日闹钟。
+     * 刷新完成后根据真实实例和最新课程数据重新安排跨日与课程结束节点闹钟。
      */
     fun refreshAndReconcileScheduling(context: Context) {
         val snapshot = WidgetInstanceRegistry.snapshot(context)
         sendUpdates(context, snapshot, snapshot.installedKinds())
-        WidgetRefreshScheduler.reconcileDateRefresh(context, snapshot)
+        WidgetRefreshScheduler.reconcileScheduling(context, snapshot)
     }
 
-    /** 仅重新核对小组件生命周期对应的跨日调度，不触发界面刷新。 */
+    /** 仅重新核对小组件生命周期对应的跨日和课程节点调度，不触发界面刷新。 */
     fun reconcileScheduling(context: Context) {
-        WidgetRefreshScheduler.reconcileDateRefresh(
+        WidgetRefreshScheduler.reconcileScheduling(
             context,
             WidgetInstanceRegistry.snapshot(context),
         )

@@ -207,6 +207,11 @@ DO NOT modify the file extension.</string>
     <string name="widget_background_allowed">Battery optimization ignored; the widget refreshes more reliably</string>
     <string name="widget_background_not_allowed">Background run not allowed yet. Tap to request ignoring battery optimization</string>
     <string name="widget_background_already_allowed">Background run allowed</string>
+    <string name="widget_background_power_management">Background battery usage</string>
+    <string name="widget_background_power_management_desc">Open this app’s system settings. Under Battery, allow background use or turn off background restrictions; names vary by device.</string>
+    <string name="widget_app_info_unavailable">Cannot open app info. Find OpenWakeUp in system app settings.</string>
+    <string name="widget_background_power_prompt_message">For reliable widget updates, open this app’s system settings and allow background battery use or turn off background restrictions. This is separate from battery optimization and must be checked manually. Setting names vary by device.</string>
+    <string name="widget_open_app_info">Open app info</string>
     <string name="later">Later</string>
     <string name="widget_tip_desc">Please return to the home screen and long-press the widget to resize it. The gesture may differ across launchers.</string>
     <string name="widget_follow_current">Follow current schedule</string>

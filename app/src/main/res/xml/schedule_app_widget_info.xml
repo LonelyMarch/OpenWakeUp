@@ -7,5 +7,5 @@
     android:previewImage="@drawable/week_widget_preview"
     android:previewLayout="@layout/schedule_app_widget"
     android:resizeMode="horizontal|vertical"
-    android:updatePeriodMillis="1800000"
+    android:updatePeriodMillis="0"
     android:widgetCategory="home_screen" />

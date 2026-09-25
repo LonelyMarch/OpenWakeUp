@@ -180,6 +180,11 @@
                 android:resource="@xml/today_and_next_day_app_widget_info" />
         </receiver>
 
+        <!-- 应用内部一次性闹钟：仅负责小组件跨日与课程结束节点刷新。 -->
+        <receiver
+            android:name=".platform.appwidget.WidgetRefreshReceiver"
+            android:exported="false" />
+
         <service
             android:name=".platform.appwidget.TodayWidgetService"
             android:exported="false"
@@ -196,7 +201,6 @@
             <intent-filter>
                 <action android:name="com.openwakeup.schedule.reminder.REMIND" />
                 <action android:name="com.openwakeup.schedule.reminder.REARRANGE" />
-                <action android:name="com.openwakeup.schedule.widget.DATE_REFRESH" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.TIME_SET" />
                 <action android:name="android.intent.action.DATE_CHANGED" />

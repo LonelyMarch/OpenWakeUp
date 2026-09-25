@@ -203,6 +203,11 @@
     <string name="widget_background_allowed">已允许忽略电池优化，小部件可更稳定地后台刷新</string>
     <string name="widget_background_not_allowed">尚未允许后台运行，点击请求忽略电池优化</string>
     <string name="widget_background_already_allowed">已经允许后台运行</string>
+    <string name="widget_background_power_management">后台耗电管理</string>
+    <string name="widget_background_power_management_desc">打开系统应用信息页，在“电量”中允许后台耗电或关闭后台限制；名称因设备而异</string>
+    <string name="widget_app_info_unavailable">无法打开应用信息页，请在系统应用设置中查找 OpenWakeUp</string>
+    <string name="widget_background_power_prompt_message">为避免小组件后台刷新中断，请前往当前应用的系统信息页，在“电量”中选择“允许后台耗电”或关闭后台耗电限制。此项与“忽略电池优化”不同，需手动确认；名称因设备而异。</string>
+    <string name="widget_open_app_info">打开应用信息页</string>
     <string name="later">稍后</string>
     <string name="widget_tip_desc">请返回桌面长按小部件来调整大小；不同桌面系统的操作方式可能略有区别。</string>
     <string name="widget_follow_current">跟随当前课表</string>

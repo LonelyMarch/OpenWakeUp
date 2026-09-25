@@ -12,7 +12,11 @@ import androidx.core.content.getSystemService
 import com.openwakeup.schedule.R
 import com.openwakeup.schedule.core.data.Prefs
 import com.openwakeup.schedule.core.util.DateUtils
-import com.openwakeup.schedule.platform.appwidget.WidgetRefreshScheduler
+import com.openwakeup.schedule.platform.appwidget.WidgetUpdateCoordinator
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import com.openwakeup.schedule.platform.appwidget.WidgetRepository
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -149,6 +153,7 @@ object ReminderScheduler {
 class ReminderReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        val appContext = context.applicationContext
         when (intent.action) {
             ReminderScheduler.ACTION_REMIND -> {
                 ReminderScheduler.notifyCourse(
@@ -160,16 +165,34 @@ class ReminderReceiver : BroadcastReceiver() {
                 )
             }
 
-            ReminderScheduler.ACTION_REARRANGE, Intent.ACTION_BOOT_COMPLETED,
+            ReminderScheduler.ACTION_REARRANGE -> runAsync {
+                ReminderScheduler.rearrange(appContext)
+            }
+
+            Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_TIME_CHANGED, Intent.ACTION_DATE_CHANGED,
             Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_MY_PACKAGE_REPLACED,
-            WidgetRefreshScheduler.ACTION_DATE_REFRESH,
                 -> {
-                WidgetRefreshScheduler.refreshAndSchedule(context)
-                ReminderScheduler.rearrange(context)
+                // 系统时间与包状态变化同时影响小组件日期内容和课前提醒，两条链路保持独立调度。
+                runAsync {
+                    WidgetUpdateCoordinator.refreshAndReconcileScheduling(appContext)
+                    ReminderScheduler.rearrange(appContext)
+                }
             }
 
             else -> {}
+        }
+    }
+
+    /** 系统事件可能同时读库并重排多条闹钟，使用 goAsync 避免阻塞广播主线程。 */
+    private fun runAsync(block: () -> Unit) {
+        val pendingResult = goAsync()
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            try {
+                block()
+            } finally {
+                pendingResult.finish()
+            }
         }
     }
 }

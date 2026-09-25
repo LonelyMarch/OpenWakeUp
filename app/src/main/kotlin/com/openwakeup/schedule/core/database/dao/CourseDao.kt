@@ -52,6 +52,17 @@ interface CourseDao {
     @Insert
     suspend fun insert(course: CourseEntity): Long
 
+    /**
+     * 批量插入课程，并按输入顺序返回生成的主键。
+     *
+     * 该接口供 Repository 在单次事务内写入导入课程，避免逐门插入造成重复的 Room 失效通知。
+     *
+     * @param courses 待插入的课程实体
+     * @return 与 [courses] 顺序一一对应的数据库主键
+     */
+    @Insert
+    suspend fun insertAll(courses: List<CourseEntity>): List<Long>
+
     @Update
     suspend fun update(course: CourseEntity)
 
@@ -84,6 +95,16 @@ interface CourseDetailDao {
     /** 按课程清空时间段（编辑课程时整组重建） */
     @Query("DELETE FROM course_details WHERE courseId = :courseId")
     suspend fun deleteDetailsOfCourse(courseId: Long)
+
+    /**
+     * 直接删除指定课表全部课程的时间段。
+     *
+     * 使用子查询在数据库内完成筛选，不需要先把全部课程加载到 Kotlin 集合再逐门删除。
+     *
+     * @param tableId 需要清空时间段的课表主键
+     */
+    @Query("DELETE FROM course_details WHERE courseId IN (SELECT id FROM courses WHERE tableId = :tableId)")
+    suspend fun deleteDetailsOfTable(tableId: Long)
 
     /** 单条时间段 */
     @Query("SELECT * FROM course_details WHERE id = :detailId")

@@ -2,8 +2,6 @@ package com.openwakeup.schedule.platform.appwidget
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
-import android.appwidget.AppWidgetProvider
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -18,20 +16,10 @@ import com.openwakeup.schedule.feature.schedule.ScheduleActivity
 import java.time.LocalDate
 
 /** “近日课程”小部件：并排显示今天与明天的课程。 */
-class RecentCourseWidgetProvider : AppWidgetProvider() {
+class RecentCourseWidgetProvider : BaseScheduleWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, appWidgetIds: IntArray) {
         appWidgetIds.forEach { updateOne(context, manager, it) }
-    }
-
-    override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent)
-        if (intent.action == AppWidgetManager.ACTION_APPWIDGET_UPDATE) {
-            val manager = AppWidgetManager.getInstance(context)
-            manager.getAppWidgetIds(ComponentName(context, javaClass)).forEach {
-                updateOne(context, manager, it)
-            }
-        }
     }
 
     /** 更新单个近日课程小部件。 */
@@ -53,11 +41,19 @@ class RecentCourseWidgetProvider : AppWidgetProvider() {
 
         views.setRemoteCollectionAdapter(
             R.id.lv_course,
-            TodayCourseWidgetService.Factory(context, 0),
+            TodayCourseWidgetService.Factory(
+                context = context,
+                dayOffset = 0,
+                providedSnapshot = snapshot,
+            ),
         )
         views.setRemoteCollectionAdapter(
             R.id.lv_course_next_day,
-            TodayCourseWidgetService.Factory(context, 1),
+            TodayCourseWidgetService.Factory(
+                context = context,
+                dayOffset = 1,
+                providedSnapshot = snapshot,
+            ),
         )
         views.setEmptyView(R.id.lv_course, R.id.empty)
         views.setEmptyView(R.id.lv_course_next_day, R.id.empty_next_day)

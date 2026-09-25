@@ -9,10 +9,11 @@ import com.openwakeup.schedule.R
 import com.openwakeup.schedule.core.data.Prefs
 import com.openwakeup.schedule.core.designsystem.theme.AppThemeController
 import com.openwakeup.schedule.core.format.AppLocaleResolver
-import com.openwakeup.schedule.platform.appwidget.WidgetRefreshScheduler
+import com.openwakeup.schedule.platform.appwidget.WidgetUpdateCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Application 入口：初始化应用主题、通知渠道和全局协程域。
@@ -39,6 +40,11 @@ class OpenWakeUpApp : Application() {
         }
         // 全局协程域
         appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        // 厂商后台策略可能在应用进程退出后清除已登记闹钟。任意组件重新创建进程时仅根据
+        // 真实桌面实例恢复调度，不主动重绘 RemoteViews；无实例时协调器会取消遗留任务。
+        appScope.launch(Dispatchers.IO) {
+            WidgetUpdateCoordinator.reconcileScheduling(this@OpenWakeUpApp)
+        }
 
         // 通知渠道：课前提醒（IMPORTANCE_HIGH）
         val manager = getSystemService<NotificationManager>()
@@ -51,8 +57,6 @@ class OpenWakeUpApp : Application() {
         }
         manager?.createNotificationChannel(channel)
 
-        // 安排次日零点刷新；系统日期广播之外再增加一层跨天可靠性保障。
-        WidgetRefreshScheduler.scheduleNextDateRefresh(this)
     }
 
     companion object {

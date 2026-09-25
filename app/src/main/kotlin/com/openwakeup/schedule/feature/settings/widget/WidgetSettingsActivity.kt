@@ -64,6 +64,7 @@ import com.openwakeup.schedule.platform.appwidget.TodayWidgetProvider
 import com.openwakeup.schedule.platform.appwidget.WidgetCourseRowRenderer
 import com.openwakeup.schedule.platform.appwidget.WidgetImageStore
 import com.openwakeup.schedule.platform.appwidget.WidgetSnapshot
+import com.openwakeup.schedule.platform.appwidget.WidgetUpdateCoordinator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -84,6 +85,8 @@ class WidgetSettingsActivity : AppCompatActivity() {
     private lateinit var adapter: SettingsListAdapter
     private var widgetTableName: String = ""
     private var requestBackgroundAfterAutostart: Boolean = false
+    private var requestBackgroundPowerAfterBatterySettings: Boolean = false
+    private var backgroundPowerPromptShown: Boolean = false
     private var previewWidgetRoot: View? = null
     private var previewBackgroundBitmap: Bitmap? = null
     private val previewCourseAdapter = PreviewCourseAdapter()
@@ -146,7 +149,13 @@ class WidgetSettingsActivity : AppCompatActivity() {
         if (requestBackgroundAfterAutostart) {
             // 用户从厂商自启动页返回后，继续请求后台运行所需的电池优化豁免。
             requestBackgroundAfterAutostart = false
-            requestBackgroundExecution()
+            requestBackgroundPowerAfterBatterySettings = requestBackgroundExecution()
+            // 已在白名单中时不会离开当前页面，可以直接进入第三项提醒。
+            if (!requestBackgroundPowerAfterBatterySettings) maybeShowBackgroundPowerPrompt()
+        } else if (requestBackgroundPowerAfterBatterySettings) {
+            // 用户从电池优化页面返回后，再提示厂商独立的后台耗电管理选项。
+            requestBackgroundPowerAfterBatterySettings = false
+            maybeShowBackgroundPowerPrompt()
         }
         if (::adapter.isInitialized && widgetTableName.isNotEmpty()) render()
     }
@@ -331,15 +340,29 @@ class WidgetSettingsActivity : AppCompatActivity() {
                     leadingIconRes = R.drawable.ms_battery_saver_24,
                     showChevron = true,
                 ),
+                // 厂商后台耗电策略与 Android 电池优化白名单相互独立；此处只提供系统入口。
+                VerticalItem(
+                    R.string.widget_background_power_management,
+                    getString(R.string.widget_background_power_management_desc),
+                    leadingIconRes = R.drawable.ms_tune_24,
+                    showChevron = true,
+                ),
             ),
         ),
     )
 
-    /** 刷新设置列表、预览与桌面小部件。 */
+    /** 只刷新设置列表和本页预览；打开页面本身不应触发桌面小组件读库与重绘。 */
     private fun render() {
         adapter.submit(buildItems())
         renderPreview()
-        notifyWidgetsChanged()
+    }
+
+    /** 用户成功保存小组件配置后，同步预览并刷新真实桌面实例与节点调度。 */
+    private fun renderAndNotifyWidgets() {
+        render()
+        lifecycleScope.launch(Dispatchers.IO) {
+            WidgetUpdateCoordinator.refreshAndReconcileScheduling(this@WidgetSettingsActivity)
+        }
     }
 
     /** 处理普通、颜色和数值设置项。 */
@@ -351,6 +374,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
             R.string.setting_pin_appwidget -> showPinWidgetDialog()
             R.string.setting_auto_launch -> openAutoStartSettings()
             R.string.setting_ingore_battery_opt -> requestBackgroundExecution()
+            R.string.widget_background_power_management -> openAppInfoForBackgroundPower()
             R.string.setting_widget_header_text_color -> showColorPicker(
                 prefs.widgetHeaderColor,
             ) { prefs.widgetHeaderColor = it }
@@ -379,13 +403,13 @@ class WidgetSettingsActivity : AppCompatActivity() {
                         R.string.setting_header_text_size -> prefs.widgetHeaderTextSize = value
                         R.string.setting_course_text_size -> prefs.widgetTextSize = value
                     }
-                    render()
+                    renderAndNotifyWidgets()
                 }
             }
         }
     }
 
-    /** 首次进入页面时明确说明并请求小部件后台运行所需的两类系统授权。 */
+    /** 首次进入页面时，按自启动、忽略电池优化、后台耗电管理的顺序引导用户。 */
     private fun maybeRequestWidgetRuntimePermissions() {
         if (prefs.widgetRuntimePermissionAsked) return
         prefs.widgetRuntimePermissionAsked = true
@@ -396,7 +420,33 @@ class WidgetSettingsActivity : AppCompatActivity() {
                 requestBackgroundAfterAutostart = true
                 openAutoStartSettings()
             }
-            .setNeutralButton(R.string.widget_request_background) { _, _ -> requestBackgroundExecution() }
+            .setNeutralButton(R.string.widget_request_background) { _, _ ->
+                requestBackgroundPowerAfterBatterySettings = requestBackgroundExecution()
+            }
+            .setNegativeButton(R.string.later, null)
+            .setOnDismissListener {
+                // 前两项无需继续跳系统页面时，再显示第三项；避免两个弹窗叠在一起。
+                if (!requestBackgroundAfterAutostart && !requestBackgroundPowerAfterBatterySettings) {
+                    maybeShowBackgroundPowerPrompt()
+                }
+            }
+            .show()
+    }
+
+    /**
+     * 在首次引导的前两项结束后提示用户手动设置后台耗电策略。
+     *
+     * 这项策略不能通过 Android 标准接口读取，因此只记录提醒是否展示，不记录或推断授权结果。
+     */
+    private fun maybeShowBackgroundPowerPrompt() {
+        if (backgroundPowerPromptShown || isFinishing || isDestroyed) return
+        backgroundPowerPromptShown = true
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.widget_background_power_management)
+            .setMessage(R.string.widget_background_power_prompt_message)
+            .setPositiveButton(R.string.widget_open_app_info) { _, _ ->
+                openAppInfoForBackgroundPower()
+            }
             .setNegativeButton(R.string.later, null)
             .show()
     }
@@ -450,20 +500,41 @@ class WidgetSettingsActivity : AppCompatActivity() {
         })
     }
 
-    /** 请求系统允许应用忽略电池优化，以提升跨天和后台刷新可靠性。 */
-    private fun requestBackgroundExecution() {
+    /**
+     * 打开当前应用的系统信息页，供用户自行调整厂商提供的后台耗电策略。
+     *
+     * Android 没有统一的“允许后台耗电”状态或直达页面接口；应用信息页是带包名定位的
+     * 标准入口。系统未提供对应页面时只提示手动查找，不把跳转结果当作已授权状态。
+     */
+    private fun openAppInfoForBackgroundPower() {
+        val appInfoIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.parse("package:$packageName")
+        }
+        runCatching { startActivity(appInfoIntent) }
+            .onFailure {
+                Toast.makeText(this, R.string.widget_app_info_unavailable, Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    /**
+     * 请求系统允许应用忽略电池优化，以提升跨天和后台刷新可靠性。
+     *
+     * @return 是否已跳转到系统授权页面；若原本已授权，则返回 false，供首次引导继续显示下一项
+     */
+    private fun requestBackgroundExecution(): Boolean {
         if (isIgnoringBatteryOptimizations()) {
             Toast.makeText(this, R.string.widget_background_already_allowed, Toast.LENGTH_SHORT)
                 .show()
-            return
+            return false
         }
         // 用户从“小组件运行权限”入口主动发起豁免请求，以提高锁屏和跨天后的刷新可靠性。
         val directRequest = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
             data = Uri.parse("package:$packageName")
         }
         // 个别厂商未实现应用级授权页面，启动失败时回退到系统电池优化应用列表。
-        runCatching { startActivity(directRequest) }
-            .onFailure { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+        if (runCatching { startActivity(directRequest) }.isSuccess) return true
+        startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        return true
     }
 
     /** 查询应用是否已被系统允许忽略电池优化。 */
@@ -481,7 +552,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
             R.string.widget_text_compose -> prefs.widgetTextCompose = checked
             R.string.widget_stroke_compose -> prefs.widgetStrokeCompose = checked
         }
-        render()
+        renderAndNotifyWidgets()
     }
 
     /** 长按可配置的小部件设置项时，先展示居中确认弹窗。 */
@@ -556,7 +627,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
             R.string.widget_stroke_compose -> prefs.widgetStrokeCompose =
                 AppDefaults.Widget.STROKE_COMPOSE
         }
-        render()
+        renderAndNotifyWidgets()
     }
 
     /** 展示要由小部件固定显示的课表。 */
@@ -574,7 +645,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
                 .setSingleChoiceItems(labels.toTypedArray(), checked) { dialog, which ->
                     prefs.widgetTableId = if (which == 0) 0L else tables[which - 1].id
                     widgetTableName = labels[which]
-                    render()
+                    renderAndNotifyWidgets()
                     dialog.dismiss()
                 }
                 .setNegativeButton(R.string.cancel, null)
@@ -674,7 +745,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
             prefs.widgetEmptyTodayText = todayText
             prefs.widgetEmptyTomorrowText = tomorrowText
             prefs.widgetEmptyViewMode = WidgetEmptyViewMode.TEXT
-            render()
+            renderAndNotifyWidgets()
             dialog.dismiss()
         }
     }
@@ -704,7 +775,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
         ColorPickerDialog.newInstance(initial).apply {
             onSaved = { color ->
                 onPicked(color)
-                render()
+                renderAndNotifyWidgets()
             }
         }.show(supportFragmentManager, "widget-color-picker")
     }
@@ -725,7 +796,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
         OpacitySliderDialog.newInstance(item.name, initialValue, trackColor).apply {
             this.onSaved = { value ->
                 onSaved(value)
-                render()
+                renderAndNotifyWidgets()
             }
         }.show(supportFragmentManager, "widget-opacity-slider")
     }
@@ -805,7 +876,7 @@ class WidgetSettingsActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 if (saved != null) {
                     onSaved(saved)
-                    render()
+                    renderAndNotifyWidgets()
                 } else {
                     Toast.makeText(
                         this@WidgetSettingsActivity,
@@ -1089,20 +1160,6 @@ class WidgetSettingsActivity : AppCompatActivity() {
                     )
                 }
             }
-        }
-    }
-
-    /** 通知所有已添加小部件重新读取全局配置。 */
-    private fun notifyWidgetsChanged() {
-        listOf(
-            ScheduleWidgetProvider::class.java,
-            TodayCourseWidgetProvider::class.java,
-            RecentCourseWidgetProvider::class.java,
-            TodayWidgetProvider::class.java,
-        ).forEach { provider ->
-            sendBroadcast(
-                Intent(this, provider).setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE),
-            )
         }
     }
 

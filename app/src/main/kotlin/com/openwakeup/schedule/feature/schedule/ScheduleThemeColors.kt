@@ -10,8 +10,9 @@ import com.openwakeup.schedule.R
 /**
  * 主课表专用的主题颜色解析器。
  *
- * 浅色模式继续尊重每张课表保存的自定义文字色；暗色模式则统一使用 Material 3 Expressive
- * 的 surface/onSurface 语义色，避免旧课表中保存的浅色背景与深色文字破坏夜间可读性。
+ * 浅色模式继续尊重每张课表保存的自定义文字色；暗色模式统一使用 Material 3 Expressive
+ * 的 onSurface 文字色。课表未配置自定义背景时使用暗色 surface，自定义图片或纯色仍由
+ * 渲染入口按用户配置显示。
  */
 internal object ScheduleThemeColors {
 
@@ -32,10 +33,10 @@ internal object ScheduleThemeColors {
     }
 
     /**
-     * 获取暗色模式下主课表应使用的表面色。
+     * 获取暗色模式下主课表默认背景应使用的表面色。
      *
      * @param context 当前界面上下文
-     * @return 夜间模式返回 surfaceContainerLow；浅色模式返回 null，表示沿用课表自定义背景
+     * @return 夜间模式返回 surfaceContainerLow；浅色模式返回 null，表示使用默认渐变
      */
     @ColorInt
     fun darkTableBackgroundColor(context: Context): Int? =

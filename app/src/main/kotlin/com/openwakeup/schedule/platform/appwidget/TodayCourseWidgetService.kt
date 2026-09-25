@@ -26,6 +26,7 @@ class TodayCourseWidgetService : RemoteViewsService() {
     internal class Factory(
         private val context: Context,
         private val dayOffset: Int,
+        private val providedSnapshot: WidgetSnapshot? = null,
     ) : RemoteViewsFactory {
 
         private data class Row(
@@ -43,7 +44,8 @@ class TodayCourseWidgetService : RemoteViewsService() {
         override fun hasStableIds(): Boolean = false
 
         override fun onDataSetChanged() {
-            val snapshot = WidgetRepository.snapshot(context, 0) ?: run {
+            // 今日与明日两列共享 Provider 的同一份数据，避免一次刷新重复执行三次完整查询。
+            val snapshot = providedSnapshot ?: WidgetRepository.snapshot(context, 0) ?: run {
                 rows = emptyList()
                 return
             }

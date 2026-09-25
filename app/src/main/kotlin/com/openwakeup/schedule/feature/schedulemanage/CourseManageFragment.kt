@@ -28,10 +28,6 @@ import com.openwakeup.schedule.core.database.entity.CourseEntity
 import com.openwakeup.schedule.core.validation.CourseRangePolicy
 import com.openwakeup.schedule.data.schedule.ScheduleRepository
 import com.openwakeup.schedule.feature.courseedit.AddCourseActivity
-import com.openwakeup.schedule.platform.appwidget.RecentCourseWidgetProvider
-import com.openwakeup.schedule.platform.appwidget.ScheduleWidgetProvider
-import com.openwakeup.schedule.platform.appwidget.TodayCourseWidgetProvider
-import com.openwakeup.schedule.platform.appwidget.TodayWidgetProvider
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -158,7 +154,6 @@ class CourseManageFragment : Fragment() {
                 lifecycleScope.launch {
                     repo.deleteCourse(course.id)
                     loadCourses()
-                    refreshWidgets()
                 }
             }
             .setNegativeButton(R.string.cancel, null)
@@ -175,7 +170,6 @@ class CourseManageFragment : Fragment() {
                     runCatching {
                         repo.clearCourses(tableId)
                         loadCourses()
-                        refreshWidgets()
                     }.onSuccess {
                         android.widget.Toast.makeText(
                             requireContext(), R.string.op_success, android.widget.Toast.LENGTH_SHORT
@@ -191,21 +185,6 @@ class CourseManageFragment : Fragment() {
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
-    }
-
-    private fun refreshWidgets() {
-        val context = requireContext()
-        listOf(
-            ScheduleWidgetProvider::class.java,
-            TodayCourseWidgetProvider::class.java,
-            RecentCourseWidgetProvider::class.java,
-            TodayWidgetProvider::class.java,
-        ).forEach { provider ->
-            context.sendBroadcast(
-                Intent(context, provider)
-                    .setAction(android.appwidget.AppWidgetManager.ACTION_APPWIDGET_UPDATE),
-            )
-        }
     }
 
     private inner class CourseListAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {

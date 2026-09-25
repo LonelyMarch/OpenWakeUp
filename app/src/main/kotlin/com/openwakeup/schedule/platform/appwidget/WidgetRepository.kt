@@ -11,6 +11,10 @@ import com.openwakeup.schedule.core.util.DateUtils
 import com.openwakeup.schedule.core.validation.CourseRangePolicy
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 /** 小部件用的一次性课表快照（RemoteViewsFactory 无法直接访问仓库 Flow） */
 data class WidgetSnapshot(
@@ -64,6 +68,36 @@ data class WidgetSnapshot(
  * RemoteViewsFactory 的 onDataSetChanged 在工作线程同步执行，故用 runBlocking 桥接 Room suspend。
  */
 object WidgetRepository {
+
+    /**
+     * 计算今天下一节尚未结束课程的结束时间。
+     *
+     * 课程列表与剩余数量都在结束时发生变化；返回值额外后移一秒，确保 Provider 重新计算时
+     * [LocalTime.now] 已经越过以分钟记录的课程结束时刻。空时间、非法时间和已经结束的课程
+     * 都会被跳过。
+     *
+     * @param context 任意 Context
+     * @return 下一结束节点的毫秒时间戳；今天没有后续节点时返回 null
+     */
+    fun nextCourseEndEpochMillis(context: Context): Long? {
+        val snapshot = snapshot(context, 0) ?: return null
+        val now = LocalDateTime.now()
+        val today = now.toLocalDate()
+        return snapshot.coursesOfDate(today)
+            .asSequence()
+            .mapNotNull { (_, detail, _) ->
+                val endText = WidgetCourseRowRenderer.times(snapshot, detail).second
+                val endTime = runCatching {
+                    LocalTime.parse(endText, TIME_FORMATTER)
+                }.getOrNull() ?: return@mapNotNull null
+                today.atTime(endTime).plusSeconds(1)
+            }
+            .filter { endDateTime -> endDateTime.isAfter(now) }
+            .minOrNull()
+            ?.atZone(ZoneId.systemDefault())
+            ?.toInstant()
+            ?.toEpochMilli()
+    }
 
     /**
      * 装配当前课表快照。
@@ -123,4 +157,7 @@ object WidgetRepository {
             table,
         )
     }
+
+    /** 作息时间统一使用 24 小时制分钟精度。 */
+    private val TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 }

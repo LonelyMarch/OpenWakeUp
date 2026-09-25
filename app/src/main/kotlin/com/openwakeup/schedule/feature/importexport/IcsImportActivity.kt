@@ -18,7 +18,6 @@ import com.openwakeup.parser.ParserException
 import com.openwakeup.parser.ics.IcsParser
 import com.openwakeup.parser.ics.IcsTimeSlot
 import com.openwakeup.schedule.R
-import com.openwakeup.schedule.core.config.AppDefaults
 import com.openwakeup.schedule.core.util.ExternalWebLinkLauncher
 import com.openwakeup.schedule.data.schedule.ScheduleRepository
 import com.openwakeup.schedule.databinding.ActivityHtmlImportBinding
@@ -247,27 +246,17 @@ class IcsImportActivity : AppCompatActivity() {
                         maxWeek = currentTable.maxWeek,
                     )
                 }
-                val rangeReport = CourseImportPolicy.prepareTarget(
-                    repo = repo,
-                    tableId = currentTable.id,
+                val preparedImport = CourseImportPolicy.prepareImport(
+                    table = currentTable,
                     previews = parseResult.courses,
+                    overwriteExisting = true,
+                    semesterStartDate = parseResult.semesterStart.toString(),
+                    resetCurrentWeekOverride = true,
                 )
-                // ICS 仅支持覆盖；解析阶段不修改数据库，避免格式错误时丢失当前课程。
-                repo.clearCourses(currentTable.id)
-                CourseImportPolicy.writeCourses(repo, currentTable.id, parseResult.courses)
-                // prepareTarget 可能扩展合法周数，因此基于仓库中的最新实体修改开学日期，
-                // 避免用解析前的旧实体把范围更新覆盖回去。
-                val preparedTable = repo.tableOnce(currentTable.id) ?: currentTable
-                repo.updateTable(
-                    preparedTable.copy(
-                        startDate = parseResult.semesterStart.toString(),
-                        // 节数与绑定作息均保留用户导入前的配置；超出实际网格的课程由统一
-                        // 范围策略标记为非法，直至用户在课程管理页修正。
-                        currentWeekOverride = AppDefaults.Table.CURRENT_WEEK_OVERRIDE,
-                    ),
-                )
+                // ICS 仅支持覆盖；清空、扩周、日期更新和课程写入在同一事务内原子提交。
+                repo.applyCourseImport(preparedImport.writeRequest)
                 setResult(RESULT_OK)
-                CourseImportResult(parseResult.courses.size, rangeReport)
+                CourseImportResult(parseResult.courses.size, preparedImport.rangeReport)
             }.onSuccess { result ->
                 importSucceeded = true
                 ImportSuccessFeedback.showThenReturnToSchedule(

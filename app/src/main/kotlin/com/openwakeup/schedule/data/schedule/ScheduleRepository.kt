@@ -1,6 +1,7 @@
 package com.openwakeup.schedule.data.schedule
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.openwakeup.schedule.R
 import com.openwakeup.schedule.core.config.AppDefaults
 import com.openwakeup.schedule.core.data.Prefs
@@ -13,18 +14,16 @@ import com.openwakeup.schedule.core.database.entity.TableEntity
 import com.openwakeup.schedule.core.database.entity.TimeDetailEntity
 import com.openwakeup.schedule.core.database.entity.TimeTableEntity
 import com.openwakeup.schedule.core.validation.CourseRangePolicy
-import com.openwakeup.schedule.platform.appwidget.RecentCourseWidgetProvider
-import com.openwakeup.schedule.platform.appwidget.ScheduleWidgetProvider
-import com.openwakeup.schedule.platform.appwidget.TodayCourseWidgetProvider
-import com.openwakeup.schedule.platform.appwidget.TodayWidgetProvider
+import com.openwakeup.schedule.platform.appwidget.WidgetUpdateCoordinator
 import com.openwakeup.schedule.platform.reminder.ReminderScheduler
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 /**
  * 课表仓库层：界面唯一的数据入口（协程 + Flow）。
@@ -72,14 +71,14 @@ class ScheduleRepository(context: Context) {
         val shiftId = scheduleShiftDao.insert(
             ScheduleShiftEntity(tableId = tableId, fromDate = fromDate, toDate = toDate),
         )
-        notifyCurrentTableChanged()
+        notifyScheduleDataChanged()
         return shiftId
     }
 
     /** 撤销一次日期调课。 */
     suspend fun undoScheduleShift(shiftId: Long) {
         scheduleShiftDao.deleteById(shiftId)
-        notifyCurrentTableChanged()
+        notifyScheduleDataChanged()
     }
 
     suspend fun timeDetailsOnce(timeTableId: Long): List<TimeDetailEntity> =
@@ -89,30 +88,52 @@ class ScheduleRepository(context: Context) {
     suspend fun currentTableId(): Long =
         prefs.currentTableId.takeIf { it > 0 } ?: tableDao.firstTable()?.id ?: 0L
 
-    /** 新建课表并切换为当前 */
     /** 拖拽排序后批量写回顺序（管理页与底部浮窗共用） */
     suspend fun reorderTables(tables: List<TableEntity>) {
-        tables.forEachIndexed { index, t ->
-            if (t.tableOrder != index) tableDao.update(t.copy(tableOrder = index))
+        val changedTables = tables.mapIndexedNotNull { index, table ->
+            table.takeIf { it.tableOrder != index }?.copy(tableOrder = index)
         }
+        if (changedTables.isEmpty()) return
+        db.withTransaction {
+            tableDao.updateAll(changedTables)
+        }
+        notifyScheduleDataChanged()
     }
 
+    /**
+     * 新建课表、应用默认配置，并在事务提交后切换为当前课表。
+     *
+     * SharedPreferences 不属于 Room 事务，必须等数据库成功提交后再更新当前课表 ID，避免插入
+     * 回滚时偏好仍指向不存在的记录。
+     *
+     * @param name 课表名称，空值使用本地化默认名称
+     * @param startDate 学期开始日期
+     * @param maxWeek 学期周数
+     * @return 新课表主键
+     */
     suspend fun createTable(
         name: String,
         startDate: String,
         maxWeek: Int = AppDefaults.Table.MAX_WEEK,
     ): Long {
-        val id = tableDao.insert(
-            TableEntity(
-                // 空名回退为本地化默认名。
-                tableName = name.ifBlank { appContext.getString(R.string.unnamed_table) },
-                startDate = startDate,
-                maxWeek = maxWeek.coerceIn(1, AppDefaults.Table.MAX_SUPPORTED_WEEKS),
-                tableOrder = tableDao.tables().first().size,
-            ),
-        )
-        applyDefaultConfig(id)
+        val defaultConfigId = contextPrefsDefaultConfigId.takeIf { it > 0 }
+        val id = db.withTransaction {
+            val insertedId = tableDao.insert(
+                TableEntity(
+                    // 在数据库中直接读取最大排序值，避免为一个数字构造完整课表列表。
+                    tableName = name.ifBlank { appContext.getString(R.string.unnamed_table) },
+                    startDate = startDate,
+                    maxWeek = maxWeek.coerceIn(1, AppDefaults.Table.MAX_SUPPORTED_WEEKS),
+                    tableOrder = tableDao.maxTableOrder() + 1,
+                ),
+            )
+            defaultConfigId?.let { sourceId ->
+                applyDefaultConfigInTransaction(insertedId, sourceId)
+            }
+            insertedId
+        }
         prefs.currentTableId = id
+        notifyScheduleDataChanged()
         return id
     }
 
@@ -121,12 +142,21 @@ class ScheduleRepository(context: Context) {
      * （除上课时间、课表名称、开学日期以外的全部配置一并套用，含一天节数）。
      */
     suspend fun applyDefaultConfig(targetId: Long, sourceId: Long? = null) {
-        val source = sourceId?.let { tableDao.tableOnce(it) }
-            ?: run {
-                val prefId = contextPrefsDefaultConfigId
-                if (prefId <= 0) return
-                tableDao.tableOnce(prefId) ?: return
-            }
+        val resolvedSourceId = sourceId ?: contextPrefsDefaultConfigId.takeIf { it > 0 } ?: return
+        db.withTransaction {
+            applyDefaultConfigInTransaction(targetId, resolvedSourceId)
+        }
+        notifyScheduleDataChanged()
+    }
+
+    /**
+     * 在调用方已经建立的 Room 事务中复制默认配置。
+     *
+     * @param targetId 接收默认配置的课表主键
+     * @param sourceId 默认配置来源课表主键
+     */
+    private suspend fun applyDefaultConfigInTransaction(targetId: Long, sourceId: Long) {
+        val source = tableDao.tableOnce(sourceId) ?: return
         val target = tableDao.tableOnce(targetId) ?: return
         if (source.id == target.id) return
         tableDao.update(
@@ -168,25 +198,39 @@ class ScheduleRepository(context: Context) {
 
     /** 清空课表全部课程（先删各课程时间段再删课程） */
     suspend fun clearCourses(tableId: Long) {
-        courseDao.coursesOnce(tableId).forEach { course ->
-            detailDao.deleteDetailsOfCourse(course.id)
+        db.withTransaction {
+            clearCoursesInTransaction(tableId)
         }
+        notifyScheduleDataChanged()
+    }
+
+    /**
+     * 在调用方事务中清空课表的课程、时间段和日期调课记录。
+     *
+     * @param tableId 目标课表主键
+     */
+    private suspend fun clearCoursesInTransaction(tableId: Long) {
+        detailDao.deleteDetailsOfTable(tableId)
         courseDao.deleteCoursesOfTable(tableId)
         scheduleShiftDao.deleteByTable(tableId)
     }
 
     /** 删除课表（级联删除课程与时间段） */
     suspend fun deleteTable(tableId: Long) {
-        // 先判定是否删的是当前表（含"未选择→回退首张"的情形），否则删完就查不出来了
-        val wasCurrent = currentTableId() == tableId
-        courseDao.coursesOnce(tableId).forEach { course ->
-            detailDao.deleteDetailsOfCourse(course.id)
+        val selectedTableId = prefs.currentTableId
+        val fallbackTableId = db.withTransaction {
+            // 偏好为 0 时当前表语义是数据库首表，必须在删除前解析实际 ID。
+            val effectiveCurrentId = selectedTableId.takeIf { it > 0 }
+                ?: tableDao.firstTable()?.id
+                ?: 0L
+            val wasCurrent = effectiveCurrentId == tableId
+            clearCoursesInTransaction(tableId)
+            tableDao.tableOnce(tableId)?.let { tableDao.delete(it) }
+            if (wasCurrent) tableDao.firstTable()?.id ?: 0L else null
         }
-        courseDao.deleteCoursesOfTable(tableId)
-        scheduleShiftDao.deleteByTable(tableId)
-        tableDao.tableOnce(tableId)?.let { tableDao.delete(it) }
-        // 显式落到剩余首张表：置 0 在"原本就是 0（回退首张）"时不会触发 StateFlow 重发
-        if (wasCurrent) prefs.currentTableId = tableDao.firstTable()?.id ?: 0L
+        // Room 提交成功后再更新进程内 StateFlow 和磁盘偏好。
+        fallbackTableId?.let { prefs.currentTableId = it }
+        notifyScheduleDataChanged()
     }
 
     /** 切换当前课表 */
@@ -194,24 +238,18 @@ class ScheduleRepository(context: Context) {
         if (prefs.currentTableId == tableId) return
         prefs.currentTableId = tableId
         // 切表后同步刷新小组件与课前提醒（两者都按 current_table_id 取数）
-        notifyCurrentTableChanged()
+        notifyScheduleDataChanged()
     }
 
-    /** 小组件 / 课前提醒重新按新的当前表取数 */
-    private suspend fun notifyCurrentTableChanged() {
-        listOf(
-            ScheduleWidgetProvider::class.java,
-            TodayCourseWidgetProvider::class.java,
-            RecentCourseWidgetProvider::class.java,
-            TodayWidgetProvider::class.java,
-        ).forEach { provider ->
-            appContext.sendBroadcast(
-                android.content.Intent(appContext, provider)
-                    .setAction(android.appwidget.AppWidgetManager.ACTION_APPWIDGET_UPDATE),
-            )
-        }
-        // rearrange 内部经 WidgetRepository.snapshot 同步读库（runBlocking），不能留在主线程
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    /**
+     * 在数据库或当前课表偏好成功提交后刷新外部展示，并重排课前提醒。
+     *
+     * 小组件协调器会先检查真实桌面实例；没有小组件时不会读库或构建 RemoteViews。提醒重排
+     * 内部通过同步快照读取数据库，因此两项外部副作用统一放到 IO 调度器。
+     */
+    private suspend fun notifyScheduleDataChanged() {
+        withContext(Dispatchers.IO) {
+            WidgetUpdateCoordinator.refreshAndReconcileScheduling(appContext)
             ReminderScheduler.rearrange(appContext)
         }
     }
@@ -225,12 +263,90 @@ class ScheduleRepository(context: Context) {
      * 仓库层作为最终边界统一限制 48 周和每天 24 节，避免导入、默认配置或未来新增入口绕过
      * 设置页的输入范围。课程时间段原值不会在这里截断，越界课程由 [CourseRangePolicy] 隐藏。
      */
-    suspend fun updateTable(table: TableEntity) = tableDao.update(
-        table.copy(
-            maxWeek = table.maxWeek.coerceIn(1, AppDefaults.Table.MAX_SUPPORTED_WEEKS),
-            nodes = table.nodes.coerceIn(1, AppDefaults.Table.MAX_SUPPORTED_NODES),
-        ),
-    )
+    suspend fun updateTable(table: TableEntity) {
+        tableDao.update(
+            table.copy(
+                maxWeek = table.maxWeek.coerceIn(1, AppDefaults.Table.MAX_SUPPORTED_WEEKS),
+                nodes = table.nodes.coerceIn(1, AppDefaults.Table.MAX_SUPPORTED_NODES),
+            ),
+        )
+        notifyScheduleDataChanged()
+    }
+
+    /**
+     * 在单次 Room 事务中应用完整课程导入。
+     *
+     * 覆盖模式先清空旧课程和调课记录，然后更新课表范围及可选的 ICS 学期日期，最后批量写入
+     * 课程与时间段。任意步骤失败都会回滚，外部 Room Flow 只会观察到提交后的最终状态。
+     *
+     * @param request 已由导入策略完成分组、去重和范围计算的写入请求
+     */
+    internal suspend fun applyCourseImport(request: CourseImportWriteRequest) {
+        db.withTransaction {
+            val existingTable = requireNotNull(tableDao.tableOnce(request.tableId)) {
+                "Target schedule does not exist"
+            }
+            if (request.overwriteExisting) {
+                clearCoursesInTransaction(request.tableId)
+            }
+
+            val updatedTable = existingTable.copy(
+                maxWeek = maxOf(existingTable.maxWeek, request.targetMaxWeek)
+                    .coerceIn(1, AppDefaults.Table.MAX_SUPPORTED_WEEKS),
+                startDate = request.semesterStartDate ?: existingTable.startDate,
+                currentWeekOverride = if (request.resetCurrentWeekOverride) {
+                    AppDefaults.Table.CURRENT_WEEK_OVERRIDE
+                } else {
+                    existingTable.currentWeekOverride
+                },
+            )
+            if (updatedTable != existingTable) {
+                tableDao.update(updatedTable)
+            }
+            insertCoursesInTransaction(request.tableId, request.courses)
+        }
+        notifyScheduleDataChanged()
+    }
+
+    /**
+     * 批量插入课程主体，并利用返回主键一次性构造全部时间段。
+     *
+     * @param tableId 所属课表主键
+     * @param courses 待写入的课程模型
+     */
+    private suspend fun insertCoursesInTransaction(
+        tableId: Long,
+        courses: List<CourseWriteModel>,
+    ) {
+        if (courses.isEmpty()) return
+        val courseIds = courseDao.insertAll(
+            courses.map { course ->
+                CourseEntity(
+                    tableId = tableId,
+                    courseName = course.name,
+                    color = course.color,
+                    credit = course.credit,
+                    note = course.note.take(300),
+                )
+            },
+        )
+        check(courseIds.size == courses.size) {
+            "Inserted course count does not match the import request"
+        }
+        val details = courses.zip(courseIds).flatMap { (course, courseId) ->
+            course.details.map { detail ->
+                detail.copy(
+                    id = 0,
+                    courseId = courseId,
+                    teacher = detail.teacher.ifBlank { course.teacher },
+                    room = detail.room.ifBlank { course.room },
+                )
+            }
+        }
+        if (details.isNotEmpty()) {
+            detailDao.insertAll(details)
+        }
+    }
 
     /** 新建课程（1 课程 + N 时间段） */
     suspend fun addCourse(
@@ -243,6 +359,45 @@ class ScheduleRepository(context: Context) {
         credit: Float = 0f,
         note: String = "",
     ): Long {
+        val courseId = db.withTransaction {
+            insertCourseInTransaction(
+                tableId = tableId,
+                name = name,
+                color = color,
+                teacher = teacher,
+                room = room,
+                details = details,
+                credit = credit,
+                note = note,
+            )
+        }
+        notifyScheduleDataChanged()
+        return courseId
+    }
+
+    /**
+     * 在调用方已经建立的 Room 事务中插入一门课程及其全部时间段。
+     *
+     * @param tableId 所属课表主键
+     * @param name 课程名称
+     * @param color 课程颜色
+     * @param teacher 时间段教师为空时使用的回退值
+     * @param room 时间段地点为空时使用的回退值
+     * @param details 待写入的时间段
+     * @param credit 课程学分
+     * @param note 课程备注
+     * @return 新课程主键
+     */
+    private suspend fun insertCourseInTransaction(
+        tableId: Long,
+        name: String,
+        color: String,
+        teacher: String,
+        room: String,
+        details: List<CourseDetailEntity>,
+        credit: Float,
+        note: String,
+    ): Long {
         val courseId = courseDao.insert(
             CourseEntity(
                 tableId = tableId,
@@ -252,21 +407,22 @@ class ScheduleRepository(context: Context) {
                 note = note.take(300),
             ),
         )
-        detailDao.insertAll(
-            details.map {
-                // 添加课程页允许每个时间段分别填写教师和地点；公共参数只作为空值回退。
-                it.copy(
-                    id = 0,
-                    courseId = courseId,
-                    teacher = it.teacher.ifBlank { teacher },
-                    room = it.room.ifBlank { room },
-                )
-            },
-        )
+        val normalizedDetails = details.map { detail ->
+            // 添加课程页允许每个时间段分别填写教师和地点；公共参数只作为空值回退。
+            detail.copy(
+                id = 0,
+                courseId = courseId,
+                teacher = detail.teacher.ifBlank { teacher },
+                room = detail.room.ifBlank { room },
+            )
+        }
+        if (normalizedDetails.isNotEmpty()) {
+            detailDao.insertAll(normalizedDetails)
+        }
         return courseId
     }
 
-    /** 编辑课程：整组重建时间段 */
+    /** 编辑课程：整组重建时间段，并保证外部观察者只看到最终状态。 */
     suspend fun updateCourse(
         courseId: Long,
         name: String,
@@ -277,9 +433,10 @@ class ScheduleRepository(context: Context) {
         credit: Float = 0f,
         note: String = "",
     ) {
-        courseDao.courseWithDetailsOnce(courseId)?.let { cwd ->
+        db.withTransaction {
+            val existing = courseDao.courseWithDetailsOnce(courseId) ?: return@withTransaction
             courseDao.update(
-                cwd.course.copy(
+                existing.course.copy(
                     courseName = name,
                     color = color,
                     credit = credit,
@@ -287,17 +444,20 @@ class ScheduleRepository(context: Context) {
                 ),
             )
             detailDao.deleteDetailsOfCourse(courseId)
-            detailDao.insertAll(
-                details.map {
-                    it.copy(
-                        id = 0,
-                        courseId = courseId,
-                        teacher = it.teacher.ifBlank { teacher },
-                        room = it.room.ifBlank { room },
-                    )
-                },
-            )
+            val normalizedDetails = details.map { detail ->
+                // 添加课程页允许每个时间段分别填写教师和地点；公共参数只作为空值回退。
+                detail.copy(
+                    id = 0,
+                    courseId = courseId,
+                    teacher = detail.teacher.ifBlank { teacher },
+                    room = detail.room.ifBlank { room },
+                )
+            }
+            if (normalizedDetails.isNotEmpty()) {
+                detailDao.insertAll(normalizedDetails)
+            }
         }
+        notifyScheduleDataChanged()
     }
 
     /** 单门课程（含时间段） */
@@ -308,24 +468,31 @@ class ScheduleRepository(context: Context) {
 
     /** 复制整门课程（同名同色同时间段插入新课程） */
     suspend fun copyCourse(tableId: Long, courseId: Long) {
-        courseWithDetailsOnce(courseId)?.let { cwd ->
-            addCourse(
-                tableId,
-                cwd.course.courseName,
-                cwd.course.color,
-                cwd.details.firstOrNull()?.teacher ?: "",
-                cwd.details.firstOrNull()?.room ?: "",
-                cwd.details,
-                cwd.course.credit,
-                cwd.course.note,
+        db.withTransaction {
+            val source = courseDao.courseWithDetailsOnce(courseId) ?: return@withTransaction
+            insertCourseInTransaction(
+                tableId = tableId,
+                name = source.course.courseName,
+                color = source.course.color,
+                teacher = source.details.firstOrNull()?.teacher ?: "",
+                room = source.details.firstOrNull()?.room ?: "",
+                details = source.details,
+                credit = source.course.credit,
+                note = source.course.note,
             )
         }
+        notifyScheduleDataChanged()
     }
 
     /** 删除整门课程 */
     suspend fun deleteCourse(courseId: Long) {
-        detailDao.deleteDetailsOfCourse(courseId)
-        courseDao.courseWithDetailsOnce(courseId)?.let { courseDao.delete(it.course) }
+        db.withTransaction {
+            val course = courseDao.courseWithDetailsOnce(courseId)?.course
+                ?: return@withTransaction
+            detailDao.deleteDetailsOfCourse(courseId)
+            courseDao.delete(course)
+        }
+        notifyScheduleDataChanged()
     }
 
     /**
@@ -337,28 +504,37 @@ class ScheduleRepository(context: Context) {
      * @return 拆分产生的新时间段 id（未拆分返回 null）
      */
     suspend fun deleteDetailThisWeek(detailId: Long, week: Int): Long? {
-        val detail = detailDao.detailOnce(detailId) ?: return null
-        val start = detail.startWeek
-        val end = detail.endWeek
-        return when {
-            week < start || week > end -> null
-            start == end -> {
-                detailDao.delete(detail); null
-            }
+        val insertedDetailId = db.withTransaction {
+            val detail = detailDao.detailOnce(detailId) ?: return@withTransaction null
+            val start = detail.startWeek
+            val end = detail.endWeek
+            when {
+                week < start || week > end -> null
+                start == end -> {
+                    detailDao.delete(detail)
+                    null
+                }
 
-            week == start -> {
-                detailDao.update(detail.copy(startWeek = start + 1)); null
-            }
+                week == start -> {
+                    detailDao.update(detail.copy(startWeek = start + 1))
+                    null
+                }
 
-            week == end -> {
-                detailDao.update(detail.copy(endWeek = end - 1)); null
-            }
+                week == end -> {
+                    detailDao.update(detail.copy(endWeek = end - 1))
+                    null
+                }
 
-            else -> {
-                detailDao.update(detail.copy(endWeek = week - 1))
-                detailDao.insert(detail.copy(id = 0, startWeek = week + 1, endWeek = end))
+                else -> {
+                    detailDao.update(detail.copy(endWeek = week - 1))
+                    detailDao.insert(
+                        detail.copy(id = 0, startWeek = week + 1, endWeek = end),
+                    )
+                }
             }
         }
+        notifyScheduleDataChanged()
+        return insertedDetailId
     }
 
     /** 一次性取课表全部课程 */
@@ -373,7 +549,10 @@ class ScheduleRepository(context: Context) {
 
     suspend fun timeTableOnce(id: Long) = timeTableDao.timeTableOnce(id)
 
-    suspend fun updateTimeTable(table: TimeTableEntity) = timeTableDao.updateTimeTable(table)
+    suspend fun updateTimeTable(table: TimeTableEntity) {
+        timeTableDao.updateTimeTable(table)
+        notifyScheduleDataChanged()
+    }
 
     /**
      * 删除指定时间表，并保证数据库中始终至少保留一张时间表。
@@ -382,18 +561,29 @@ class ScheduleRepository(context: Context) {
      * @return 删除成功返回 true；目标不存在或当前仅剩一张时间表时返回 false
      */
     suspend fun deleteTimeTable(id: Long): Boolean {
-        val existingTables = timeTableDao.timeTables().first()
-        // 仓库层保留最终安全边界，避免未来新增入口绕过界面检查后把时间表删空。
-        if (existingTables.size <= 1 || existingTables.none { it.id == id }) return false
-        timeTableDao.deleteDetailsOfTable(id)
-        timeTableDao.timeTableOnce(id)?.let { timeTableDao.deleteTimeTable(it) }
-        // 解除悬空引用：绑定被删作息表的课表改绑剩余作息表中最早的一张；
-        // 默认表（id=1）仍在时即落到默认表，否则落到删除后排在最前的作息表。
-        val fallback = timeTableDao.timeTables().first().minOfOrNull { it.id } ?: 1L
-        tableDao.tables().first()
-            .filter { it.timeTableId == id }
-            .forEach { tableDao.update(it.copy(timeTableId = fallback)) }
-        return true
+        val deleted = db.withTransaction {
+            val existingTables = timeTableDao.timeTablesOnce()
+            val target = existingTables.firstOrNull { table -> table.id == id }
+            // 仓库层保留最终安全边界，避免未来新增入口绕过界面检查后把时间表删空。
+            if (existingTables.size <= 1 || target == null) return@withTransaction false
+
+            timeTableDao.deleteDetailsOfTable(id)
+            timeTableDao.deleteTimeTable(target)
+            // 默认表仍在时自然得到 id=1；否则选择删除后剩余主键最小的作息表。
+            val fallbackId = existingTables
+                .asSequence()
+                .filter { table -> table.id != id }
+                .minOf { table -> table.id }
+            val reboundTables = tableDao.tablesOnce()
+                .filter { table -> table.timeTableId == id }
+                .map { table -> table.copy(timeTableId = fallbackId) }
+            if (reboundTables.isNotEmpty()) {
+                tableDao.updateAll(reboundTables)
+            }
+            true
+        }
+        if (deleted) notifyScheduleDataChanged()
+        return deleted
     }
 
     /**
@@ -422,11 +612,13 @@ class ScheduleRepository(context: Context) {
      * @param timeTableId 待更新的作息表 id
      * @param times 按节次顺序排列的起止时间
      */
-    suspend fun replaceTimeDetails(timeTableId: Long, times: List<Pair<String, String>>) =
+    suspend fun replaceTimeDetails(timeTableId: Long, times: List<Pair<String, String>>) {
         timeTableDao.replaceDetails(
             timeTableId,
             times.take(AppDefaults.Table.MAX_SUPPORTED_NODES).mapIndexed { i, (s, e) ->
                 TimeDetailEntity(timeTableId = 0, node = i + 1, startTime = s, endTime = e)
             },
         )
+        notifyScheduleDataChanged()
+    }
 }

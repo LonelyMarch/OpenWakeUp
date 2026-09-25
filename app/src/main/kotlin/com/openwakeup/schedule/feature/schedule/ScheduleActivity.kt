@@ -3,7 +3,6 @@ package com.openwakeup.schedule.feature.schedule
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Outline
-import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -21,9 +20,12 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.doOnLayout
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
@@ -41,6 +43,7 @@ import com.openwakeup.schedule.core.database.entity.TableEntity
 import com.openwakeup.schedule.core.database.entity.TimeDetailEntity
 import com.openwakeup.schedule.core.designsystem.component.CascadeMenu
 import com.openwakeup.schedule.core.format.AppDateFormatter
+import com.openwakeup.schedule.core.image.TableBackgroundImageStore
 import com.openwakeup.schedule.core.util.DateUtils
 import com.openwakeup.schedule.core.validation.CourseRangePolicy
 import com.openwakeup.schedule.data.schedule.ScheduleRepository
@@ -61,6 +64,7 @@ import com.openwakeup.schedule.feature.settings.global.SettingsActivity
 import com.openwakeup.schedule.feature.settings.schedule.ScheduleSettingsActivity
 import com.openwakeup.schedule.feature.settings.timetable.TimeSettingsActivity
 import com.openwakeup.schedule.feature.settings.widget.WidgetSettingsActivity
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -72,7 +76,7 @@ import java.time.LocalDate
  * tv_week→锚定菜单（设置当前周/回到本周/新建课表）、ib_add→加课、ib_import→导入菜单（含子菜单）、
  * ib_share→导出菜单、ib_more→展开底部菜单（BACK 收起）、宫格跳转、周次滑条换周、课表切换。
  */
-class ScheduleActivity : AppCompatActivity() {
+class ScheduleActivity : AppCompatActivity(), WeekPageSnapshotProvider {
 
     private val repo by lazy { ScheduleRepository(this) }
     private lateinit var ui: ScheduleActivityUI
@@ -80,11 +84,26 @@ class ScheduleActivity : AppCompatActivity() {
     private var table: TableEntity? = null
     private var displayWeek = 1
     private var currentWeek = 0
-    private var courses: List<CourseEntity> = emptyList()
-    private var details: List<CourseDetailEntity> = emptyList()
+    /** 主课表已通过范围校验的“课程—时间段”扁平快照，避免刷新页面时反复做嵌套过滤。 */
+    private var courseSource: List<Pair<CourseEntity, CourseDetailEntity>> = emptyList()
     private var times: List<TimeDetailEntity> = emptyList()
     private var shifts: List<ScheduleShiftEntity> = emptyList()
     private var tableAdapter: TableNameAdapter? = null
+
+    /** 当前宿主自己的周页面快照；只随 Activity 生命周期存在，不再跨页面使用静态字段共享。 */
+    private var weekPageSnapshot: WeekPageSnapshot? = null
+
+    /** 当前背景图解码任务；切表或 Activity 销毁时取消，防止无效图片继续占用 CPU。 */
+    private var backgroundLoadJob: Job? = null
+
+    /** 背景请求递增序号，用于阻止较慢的旧任务覆盖用户刚切换的新背景。 */
+    private var backgroundRequestId = 0L
+
+    /** 已显示图片的路径、目标尺寸与文件版本；完全一致时不重复解码。 */
+    private var displayedBackgroundKey: TableBackgroundImageStore.RequestKey? = null
+
+    /** 为新建、恢复或重新显示的周页面提供最新主页数据。 */
+    override fun currentWeekPageSnapshot(): WeekPageSnapshot? = weekPageSnapshot
 
     private val addCourseLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -501,83 +520,95 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     private fun observeData() {
-        // 当前表 + 该表课程/作息合为一条链：collectLatest 在切表时取消上一张表的课程收集，
-        // 避免"内层 Room Flow 永不结束 → 外层 StateFlow 新值被合并丢弃 → 换表后仍是旧课程"。
         lifecycleScope.launch {
-            repo.currentTable.collectLatest { t ->
-                if (t == null) {
-                    renderNoTableState()
-                    return@collectLatest
-                }
-                val previous = table
-                val tableChanged = previous?.id != t.id
-                // 周数/列数变化需要重建 ViewPager；仅改颜色等外观时保留当前页，避免跳回本周
-                val needRebuild = previous == null || tableChanged || previous.maxWeek != t.maxWeek
-                table = t
-                if (tableChanged) {
-                    // 新表课程尚未到达，先清掉上一张表的数据，防止页面闪出别的表的课
-                    courses = emptyList()
-                    details = emptyList()
-                    times = emptyList()
-                    shifts = emptyList()
-                }
-                currentWeek =
-                    DateUtils.currentWeek(LocalDate.parse(t.startDate)).coerceIn(1, t.maxWeek)
-                displayWeek = if (needRebuild) {
-                    (if (t.currentWeekOverride > 0) t.currentWeekOverride else currentWeek)
-                        .coerceIn(1, t.maxWeek)
-                } else {
-                    displayWeek.coerceIn(1, t.maxWeek)
-                }
-                applyBackground(t.background)
-                if (needRebuild) {
-                    ui.viewPager.adapter = object : FragmentStateAdapter(this@ScheduleActivity) {
-                        override fun getItemCount(): Int = t.maxWeek
-                        override fun createFragment(position: Int): Fragment =
-                            WeekPageFragment.newInstance(position + 1).also(::bindWeekPageCallbacks)
-                    }
-                    ui.viewPager.setCurrentItem(displayWeek - 1, false)
-                }
-                // 先落到 valueFrom 再改上界，避免旧 value 超出新 maxWeek 时 Slider 校验抛异常
-                ui.sliderWeek.value = 1f
-                ui.sliderWeek.valueFrom = 1f
-                ui.sliderWeek.valueTo = t.maxWeek.toFloat()
-                ui.sliderWeek.value = displayWeek.toFloat()
-                refreshHeaders()
-                tableAdapter?.setCurrentId(t.id)
-                refreshPage()
+            // lifecycleScope 只会在 Activity 销毁时取消；repeatOnLifecycle 让主页不可见时同时
+            // 解除 Room 与偏好 Flow 的订阅，避免后台继续查询、分配列表并触发页面重绘。
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // 当前课表链会长期挂起，必须与另外两条 Flow 分别放入子协程并行收集。
+                launch {
+                    // collectLatest 在切表时取消上一张表的课程收集，避免旧表 Flow 持续占用内存。
+                    repo.currentTable.collectLatest { t ->
+                        if (t == null) {
+                            renderNoTableState()
+                            return@collectLatest
+                        }
+                        val previous = table
+                        val tableChanged = previous?.id != t.id
+                        // 周数变化需要重建 ViewPager；仅改颜色等外观时保留当前页。
+                        val needRebuild =
+                            previous == null || tableChanged || previous.maxWeek != t.maxWeek
+                        table = t
+                        if (tableChanged) {
+                            // 新表课程尚未到达，先清掉上一张表的数据，防止页面闪出别的表的课。
+                            courseSource = emptyList()
+                            times = emptyList()
+                            shifts = emptyList()
+                        }
+                        currentWeek = DateUtils.currentWeek(LocalDate.parse(t.startDate))
+                            .coerceIn(1, t.maxWeek)
+                        displayWeek = if (needRebuild) {
+                            (if (t.currentWeekOverride > 0) t.currentWeekOverride else currentWeek)
+                                .coerceIn(1, t.maxWeek)
+                        } else {
+                            displayWeek.coerceIn(1, t.maxWeek)
+                        }
+                        applyBackground(t.background)
+                        if (needRebuild) {
+                            ui.viewPager.adapter =
+                                object : FragmentStateAdapter(this@ScheduleActivity) {
+                                    override fun getItemCount(): Int = t.maxWeek
 
-                combine(
-                    repo.coursesWithDetails(t.id),
-                    repo.timeDetails(t.timeTableId),
-                    repo.scheduleShifts(t.id),
-                ) { cwds, times, shifts ->
-                    Triple(
-                        cwds,
-                        times,
-                        shifts
-                    )
-                }.collect { (cwds, times, shifts) ->
-                    val visibleNodeLimit = CourseRangePolicy.visibleNodeLimit(t.nodes)
-                    val visibleCourses = cwds.filter { courseWithDetails ->
-                        CourseRangePolicy.isCourseValid(courseWithDetails.details, visibleNodeLimit)
+                                    override fun createFragment(position: Int): Fragment =
+                                        WeekPageFragment.newInstance(position + 1)
+                                            .also(::bindWeekPageCallbacks)
+                                }
+                            ui.viewPager.setCurrentItem(displayWeek - 1, false)
+                        }
+                        // 先落到 valueFrom 再改上界，避免旧值超出新 maxWeek 时 Slider 抛异常。
+                        ui.sliderWeek.value = 1f
+                        ui.sliderWeek.valueFrom = 1f
+                        ui.sliderWeek.valueTo = t.maxWeek.toFloat()
+                        ui.sliderWeek.value = displayWeek.toFloat()
+                        refreshHeaders()
+                        tableAdapter?.setCurrentId(t.id)
+                        refreshPage()
+
+                        combine(
+                            repo.coursesWithDetails(t.id),
+                            repo.timeDetails(t.timeTableId),
+                            repo.scheduleShifts(t.id),
+                        ) { cwds, times, shifts ->
+                            Triple(cwds, times, shifts)
+                        }.collect { (cwds, times, shifts) ->
+                            val visibleNodeLimit = CourseRangePolicy.visibleNodeLimit(t.nodes)
+                            val visibleCourses = cwds.filter { courseWithDetails ->
+                                CourseRangePolicy.isCourseValid(
+                                    courseWithDetails.details,
+                                    visibleNodeLimit,
+                                )
+                            }
+                            // 非法课程保留在数据库和课程管理页，主页只接收范围完整合法的数据。
+                            courseSource = visibleCourses.flatMap { courseWithDetails ->
+                                courseWithDetails.details.map { detail ->
+                                    courseWithDetails.course to detail
+                                }
+                            }
+                            this@ScheduleActivity.times = times
+                            this@ScheduleActivity.shifts = shifts
+                            refreshPage()
+                        }
                     }
-                    // 非法课程保留在数据库和课程管理页，主课表只接收范围完整合法的课程。
-                    courses = visibleCourses.map { courseWithDetails -> courseWithDetails.course }
-                    details =
-                        visibleCourses.flatMap { courseWithDetails -> courseWithDetails.details }
-                    this@ScheduleActivity.times = times
-                    this@ScheduleActivity.shifts = shifts
-                    refreshPage()
+                }
+
+                launch {
+                    repo.tables().collect { tables -> tableAdapter?.submit(tables) }
+                }
+
+                launch {
+                    // 全局日期格式变化时立即重绘主页日期行。
+                    Prefs.get(this@ScheduleActivity).dateFormatFlow.collect { refreshHeaders() }
                 }
             }
-        }
-        lifecycleScope.launch {
-            repo.tables().collect { tables -> tableAdapter?.submit(tables) }
-        }
-        // 全局日期格式变化时立即重绘主页日期行（WeekPageFragment 在 onResume 拉取最新格式）。
-        lifecycleScope.launch {
-            Prefs.get(this@ScheduleActivity).dateFormatFlow.collect { refreshHeaders() }
         }
     }
 
@@ -602,31 +633,20 @@ class ScheduleActivity : AppCompatActivity() {
     private fun refreshPage() {
         val hasTable = table != null
         val t = table ?: createNoTablePreview()
-        val snapshot = WeekPageFragment.Snapshot(
+        val snapshot = WeekPageSnapshot(
             table = t,
             times = if (hasTable) times else emptyList(),
-            currentWeek = if (hasTable) currentWeek.coerceIn(0, t.maxWeek) else 1,
             startDate = LocalDate.parse(t.startDate),
-            source = if (hasTable) {
-                courses.flatMap { course ->
-                    details.filter { detail -> detail.courseId == course.id }
-                        .map { detail -> course to detail }
-                }
-            } else {
-                emptyList()
-            },
+            source = if (hasTable) courseSource else emptyList(),
             shifts = if (hasTable) shifts else emptyList(),
         )
-        WeekPageFragment.latest = snapshot
+        weekPageSnapshot = snapshot
         val fragment =
             supportFragmentManager.findFragmentByTag("f${displayWeek - 1}") as? WeekPageFragment
         fragment?.let { page ->
             // 主题切换后 FragmentManager 会恢复旧页面实例；恢复实例必须重新绑定 Activity 回调。
             bindWeekPageCallbacks(page)
-            page.update(
-                snapshot.table, snapshot.times, displayWeek,
-                snapshot.currentWeek, snapshot.startDate, snapshot.source, snapshot.shifts,
-            )
+            page.update(snapshot)
         }
     }
 
@@ -640,8 +660,7 @@ class ScheduleActivity : AppCompatActivity() {
         table = null
         currentWeek = 1
         displayWeek = 1
-        courses = emptyList()
-        details = emptyList()
+        courseSource = emptyList()
         times = emptyList()
         shifts = emptyList()
 
@@ -711,33 +730,82 @@ class ScheduleActivity : AppCompatActivity() {
         page.onQuickAddRequest = { draft -> launchQuickAdd(draft) }
     }
 
-    /** 背景：色值直接铺色，图片 uri 走 BitmapFactory 解码（避免 Coil UI 依赖） */
+    /**
+     * 应用课表背景。
+     *
+     * 未配置自定义背景时，暗色模式使用主题表面色，浅色模式使用默认渐变；用户明确配置的
+     * 纯色或图片在两种主题下都会生效。图片等待背景 View 完成布局后，按真实显示尺寸异步
+     * 采样。每次调用都会使旧请求失效，切换课表时不会出现上一张表的慢速解码结果覆盖新背景。
+     *
+     * @param background 空串表示默认渐变，颜色以 `#` 开头，其他值为本地路径或图片 URI
+     */
     private fun applyBackground(background: String) {
-        ScheduleThemeColors.darkTableBackgroundColor(this)?.let { darkBackground ->
-            // 夜间模式强制使用 M3E 深色表面，避免浅色自定义图片或颜色让主表格重新变亮。
+        val requestId = ++backgroundRequestId
+        backgroundLoadJob?.cancel()
+        backgroundLoadJob = null
+        if (background.isBlank()) {
+            displayedBackgroundKey = null
             ui.ivBg.setImageDrawable(null)
-            ui.ivBg.setBackgroundColor(darkBackground)
-            return
-        }
-        if (background.isBlank() || background.startsWith("#")) {
-            ui.ivBg.setImageDrawable(null)
-            if (background.startsWith("#")) {
-                ui.ivBg.setBackgroundColor(Color.parseColor(background))
+            val darkBackground = ScheduleThemeColors.darkTableBackgroundColor(this)
+            if (darkBackground != null) {
+                // 只有默认背景跟随夜间主题；用户主动选择的图片或纯色必须保持可见。
+                ui.ivBg.setBackgroundColor(darkBackground)
             } else {
                 ui.ivBg.setBackgroundResource(R.drawable.main_gradient_background)
             }
             return
         }
-        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val bmp = runCatching {
-                contentResolver.openInputStream(Uri.parse(background))?.use { input ->
-                    android.graphics.BitmapFactory.decodeStream(input)
+        if (background.startsWith("#")) {
+            displayedBackgroundKey = null
+            ui.ivBg.setImageDrawable(null)
+            runCatching { Color.parseColor(background) }
+                .onSuccess(ui.ivBg::setBackgroundColor)
+                .onFailure { ui.ivBg.setBackgroundResource(R.drawable.main_gradient_background) }
+            return
+        }
+
+        // doOnLayout 的回调参数类型固定为 View，提前保留强类型引用以调用 ImageView 专属 API。
+        val imageView = ui.ivBg
+        imageView.doOnLayout {
+            if (requestId != backgroundRequestId) return@doOnLayout
+            val request = TableBackgroundImageStore.requestKey(
+                source = background,
+                targetWidth = imageView.width,
+                targetHeight = imageView.height,
+            ) ?: return@doOnLayout
+            if (request == displayedBackgroundKey && imageView.drawable != null) return@doOnLayout
+
+            backgroundLoadJob = lifecycleScope.launch {
+                val bitmap = TableBackgroundImageStore.decodeForView(
+                    context = this@ScheduleActivity,
+                    request = request,
+                )
+                if (requestId != backgroundRequestId) {
+                    // 极少数解码器无法及时响应取消；结果已过期时立即释放，绝不挂到 ImageView。
+                    bitmap?.recycle()
+                    return@launch
                 }
-            }.getOrNull()
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                if (bmp != null) ui.ivBg.setImageBitmap(bmp)
+                if (bitmap == null) {
+                    displayedBackgroundKey = null
+                    imageView.setImageDrawable(null)
+                    imageView.setBackgroundResource(R.drawable.main_gradient_background)
+                } else {
+                    imageView.background = null
+                    imageView.setImageBitmap(bitmap)
+                    displayedBackgroundKey = request
+                }
+                backgroundLoadJob = null
             }
         }
+    }
+
+    /** Activity 销毁时使所有延迟布局回调和解码结果失效。 */
+    override fun onDestroy() {
+        backgroundRequestId++
+        backgroundLoadJob?.cancel()
+        backgroundLoadJob = null
+        displayedBackgroundKey = null
+        super.onDestroy()
     }
 
     /** 底部浮窗课表项拖拽排序（横向，与多课表管理共用 tableOrder） */

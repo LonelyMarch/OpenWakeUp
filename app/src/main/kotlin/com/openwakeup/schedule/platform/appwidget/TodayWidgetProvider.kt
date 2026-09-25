@@ -2,8 +2,6 @@ package com.openwakeup.schedule.platform.appwidget
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
-import android.appwidget.AppWidgetProvider
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -24,7 +22,7 @@ import java.time.format.DateTimeFormatter
 /**
  * 日视图小部件：标题区 + 当天完整课程色块列表 + 点击进入主界面。
  */
-class TodayWidgetProvider : AppWidgetProvider() {
+class TodayWidgetProvider : BaseScheduleWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, appWidgetIds: IntArray) {
         for (id in appWidgetIds) updateOne(context, manager, id)
@@ -44,15 +42,6 @@ class TodayWidgetProvider : AppWidgetProvider() {
                     if (intent.action == ACTION_NEXT_DAY) 1 else 0
                 )
                 updateOne(context, AppWidgetManager.getInstance(context), id)
-            }
-
-            AppWidgetManager.ACTION_APPWIDGET_UPDATE -> {
-                val manager = AppWidgetManager.getInstance(context)
-                onUpdate(
-                    context,
-                    manager,
-                    manager.getAppWidgetIds(ComponentName(context, javaClass))
-                )
             }
 
             else -> super.onReceive(context, intent)
@@ -150,7 +139,12 @@ class TodayWidgetProvider : AppWidgetProvider() {
         renderRemainingCourseCount(context, views, snapshot)
         views.setRemoteCollectionAdapter(
             R.id.lv_course,
-            TodayWidgetService.Factory(context, offset, widthDp),
+            TodayWidgetService.Factory(
+                context = context,
+                offset = offset,
+                widthDp = widthDp,
+                providedSnapshot = snapshot,
+            ),
         )
         views.setEmptyView(R.id.lv_course, android.R.id.empty)
         WidgetNavigation.bind(

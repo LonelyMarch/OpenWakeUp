@@ -33,7 +33,7 @@ import com.openwakeup.schedule.feature.settings.SettingsItem
 import com.openwakeup.schedule.feature.settings.SettingsListAdapter
 import com.openwakeup.schedule.feature.settings.SwitchItem
 import com.openwakeup.schedule.feature.settings.VerticalItem
-import com.openwakeup.schedule.platform.appwidget.WidgetRefreshScheduler
+import com.openwakeup.schedule.platform.appwidget.WidgetUpdateCoordinator
 import com.openwakeup.schedule.platform.reminder.ReminderScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -346,7 +346,7 @@ class BackupImportActivity : AppCompatActivity() {
             // 刷新任务使用应用 Context，且在主题或语言触发 Activity 重建前完成调度请求。
             withContext(Dispatchers.IO) {
                 runCatching {
-                    WidgetRefreshScheduler.refreshAll(applicationContext)
+                    WidgetUpdateCoordinator.refreshAndReconcileScheduling(applicationContext)
                     ReminderScheduler.rearrange(applicationContext)
                 }
             }

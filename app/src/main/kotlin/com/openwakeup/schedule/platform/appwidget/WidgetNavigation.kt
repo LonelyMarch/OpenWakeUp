@@ -31,6 +31,22 @@ object WidgetNavigation {
             .putInt("offset_$id", offset.coerceIn(0, 1)).apply()
     }
 
+    /**
+     * 删除已经移出桌面的实例翻页状态，避免 SharedPreferences 长期积累无效 ID。
+     *
+     * @param context 任意 Context
+     * @param ids 已被桌面删除的小组件实例 ID
+     */
+    fun removeOffsets(context: Context, ids: IntArray) {
+        if (ids.isEmpty()) return
+        context.getSharedPreferences("widget_navigation", Context.MODE_PRIVATE).edit().apply {
+            ids.forEach { id ->
+                remove("date_$id")
+                remove("offset_$id")
+            }
+        }.apply()
+    }
+
     /** 配置经典小部件的主区域、设置按钮和翻页按钮。 */
     fun bind(
         context: Context, views: RemoteViews, id: Int, listId: Int,

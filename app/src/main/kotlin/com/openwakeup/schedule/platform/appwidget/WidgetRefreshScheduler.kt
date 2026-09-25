@@ -11,9 +11,9 @@ import java.time.ZoneId
 /**
  * 桌面小组件一次性刷新闹钟调度器。
  *
- * 小组件只需要在跨日与今天课程结束时更新，不应使用会唤醒设备的精确闹钟。这里统一使用
- * [AlarmManager.RTC] 和非精确窗口；系统处于休眠状态时允许延迟到下次唤醒，再由日期广播提供
- * 额外保障。课前提醒仍由独立的 ReminderScheduler 使用精确唤醒闹钟。
+ * 小组件日期和课程进度属于用户直接可见状态，即使应用进程已经退出，也需要由系统通过显式
+ * [PendingIntent] 拉起 [WidgetRefreshReceiver] 完成刷新。精确闹钟权限可用时采用精确唤醒；
+ * 权限不可用或在调用期间被撤销时退化为非精确唤醒，避免因普通非唤醒闹钟长期停留在旧日期。
  */
 object WidgetRefreshScheduler {
 
@@ -27,8 +27,6 @@ object WidgetRefreshScheduler {
     private const val REQUEST_DATE_REFRESH = 0x7301
     private const val REQUEST_COURSE_PROGRESS_REFRESH = 0x7302
     private const val DATE_DELAY_SECONDS = 2L
-    private const val DATE_WINDOW_MILLIS = 5 * 60 * 1_000L
-    private const val COURSE_WINDOW_MILLIS = 60 * 1_000L
 
     /**
      * 根据真实实例重新建立所需闹钟。
@@ -52,7 +50,7 @@ object WidgetRefreshScheduler {
         }
     }
 
-    /** 安排次日零点后两秒的非唤醒兜底刷新。 */
+    /** 安排次日零点后两秒的进程外唤醒刷新。 */
     fun scheduleNextDateRefresh(context: Context) {
         val appContext = context.applicationContext
         val alarm = appContext.getSystemService(AlarmManager::class.java) ?: return
@@ -65,15 +63,14 @@ object WidgetRefreshScheduler {
             .atZone(ZoneId.systemDefault())
             .toInstant()
             .toEpochMilli()
-        alarm.setWindow(
-            AlarmManager.RTC,
+        scheduleWakeupAlarm(
+            alarm,
             triggerAt,
-            DATE_WINDOW_MILLIS,
             pendingIntent(appContext, REQUEST_DATE_REFRESH, ACTION_DATE_REFRESH),
         )
     }
 
-    /** 根据固定/当前小组件课表安排今天下一节课程结束后的非唤醒刷新。 */
+    /** 根据固定/当前小组件课表安排今天下一节课程结束后的进程外唤醒刷新。 */
     private fun scheduleNextCourseProgressRefresh(context: Context) {
         val appContext = context.applicationContext
         val alarm = appContext.getSystemService(AlarmManager::class.java) ?: return
@@ -82,16 +79,47 @@ object WidgetRefreshScheduler {
             cancelCourseProgressRefresh(appContext)
             return
         }
-        alarm.setWindow(
-            AlarmManager.RTC,
+        scheduleWakeupAlarm(
+            alarm,
             triggerAt,
-            COURSE_WINDOW_MILLIS,
             pendingIntent(
                 appContext,
                 REQUEST_COURSE_PROGRESS_REFRESH,
                 ACTION_COURSE_PROGRESS_REFRESH,
             ),
         )
+    }
+
+    /**
+     * 登记允许在设备休眠期间执行的一次性唤醒闹钟。
+     *
+     * [AlarmManager.canScheduleExactAlarms] 的结果可能在检查后立即因用户或系统撤权而失效，
+     * 因此精确调用仍需捕获 [SecurityException]，并退化到不依赖精确闹钟权限的
+     * [AlarmManager.setAndAllowWhileIdle]。两种路径都使用 [AlarmManager.RTC_WAKEUP]，确保
+     * 应用进程不存在时系统仍可发送显式广播。
+     *
+     * @param alarm 系统闹钟服务
+     * @param triggerAt 按系统墙上时钟计算的触发时间戳
+     * @param operation 指向应用内部刷新接收器的显式广播 PendingIntent
+     */
+    private fun scheduleWakeupAlarm(
+        alarm: AlarmManager,
+        triggerAt: Long,
+        operation: PendingIntent,
+    ) {
+        if (alarm.canScheduleExactAlarms()) {
+            try {
+                alarm.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAt,
+                    operation,
+                )
+                return
+            } catch (_: SecurityException) {
+                // 权限可能在检查与登记之间被撤销；继续使用无需精确权限的休眠唤醒路径。
+            }
+        }
+        alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, operation)
     }
 
     /** 没有任何桌面实例时取消跨日闹钟，包括旧版本遗留的 PendingIntent。 */
